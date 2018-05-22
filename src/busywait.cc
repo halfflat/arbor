@@ -21,8 +21,8 @@ struct posix_clock {
 
 using thread_cputime_clock = posix_clock<CLOCK_THREAD_CPUTIME_ID>;
 
-void busy_wait_ns(double ns) {
-    auto until = thread_cputime_clock::now()+std::chrono::nanoseconds((int)(ns));
+void busy_wait_ns(double time_ns) {
+    auto until = thread_cputime_clock::now()+std::chrono::nanoseconds((int)(time_ns));
     while (thread_cputime_clock::now()<until) ;
 }
 

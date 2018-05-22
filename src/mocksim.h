@@ -1,45 +1,21 @@
 #pragma once
 
+#include <cfloat>
 #include <cstddef>
 #include <cassert>
 #include <memory>
+#include <random>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
+#include "mock_vector.h"
+
 using time_type = float;
 using gid_type = unsigned;
 
-struct mock_timed_vector {
-    std::size_t n;
-    time_type t_min, t_max;
-
-    mock_timed_vector() { clear(); }
-    mock_timed_vector(const mock_timed_vector&) = default;
-    mock_timed_vector& operator=(const mock_timed_vector&) = default;
-
-    void clear() { n = 0; t_min = 0; t_max = 0; }
-    bool empty() const { return n>0; }
-    std::size_t size() const { return n; }
-
-    void push_back(time_type t) {
-        t_min = empty()? t: std::min(t, t_min);
-        t_max = empty()? t: std::max(t, t_max);
-        ++n;
-    }
-
-    void append(const mock_timed_vector& m) {
-        t_min = empty()? std::min(t_min, m.t_min): m.t_min;
-        t_max = empty()? std::max(t_max, m.t_max): m.t_max;
-        n += m.n;
-    }
-
-    std::size_t take_before(time_type t);
-};
-
-
-using spike_vector = mock_timed_vector;
-using pse_vector = mock_timed_vector;
+using spike_vector = mock_vector<time_type>;
+using pse_vector = mock_vector<time_type>;
 
 struct epoch {
     std::ptrdiff_t id = 0;
@@ -98,13 +74,13 @@ struct ptr_range {
 
 struct mock_parameters {
     int n_rank = 1; // multiplier for spike exchange;
-    int fanout = 1; // events per spike;
+    int fanout = 1000; // events per spike;
     time_type min_delay = 10; // [ms]
     time_type mean_spike_rate = .3; // [kHz]
 
     // busy wait times are pulled from an exponential
     // distribution (or equivalent) with given mean in ms.
-    float busy_wait_advance_per_gid = 0.; // [ms]
+    float busy_wait_advance = 0.; // [ms]
     float busy_wait_exchange = 0.; // [ms]
 
     int rng_seed = 10000;
@@ -112,7 +88,7 @@ struct mock_parameters {
 
 struct cell_group {
     cell_group(std::pair<gid_type, gid_type> gids, const mock_parameters&);
-    std::vector<spike> advance(epoch p, time_type dt, const ptr_range<pse_vector>& events);
+    spike_vector advance(epoch p, const ptr_range<pse_vector>& events);
 
     std::pair<gid_type, gid_type> gids_;
     time_type rate_;
@@ -120,24 +96,58 @@ struct cell_group {
 
     std::minstd_rand rng_;
     double wait_per_gid_ = 0;
+
+    std::size_t n_delivered = 0;
+    std::size_t n_spike = 0;
 };
 
 using cell_group_ptr = std::unique_ptr<cell_group>;
 
 struct cell_group_partition {
-    std::vector<gid_type> cell_group_gid_divs = {0};
+    std::vector<gid_type> group_divs = {0};
 
-    std::pair<gid_type> operator[](int i) {
-        return {cell_group_gid_divs.at(i), cell_group_gid_divs.at(i+1)};
+    explicit cell_group_partition(const std::vector<gid_type>& sizes) {
+        group_divs.push_back(0);
+        std::partial_sum(sizes.begin(), sizes.end(), std::back_inserter(group_divs));
     }
 
-    gid_type n_gid() const { return cell_group_gid_divs.back(); }
-    gid_type n_cell_groups() const { return cell_group_gid_divs.size()-1; }
+    std::pair<gid_type, gid_type> operator[](int i) {
+        return {group_divs.at(i), group_divs.at(i+1)};
+    }
+
+    gid_type n_gid() const { return group_divs.back(); }
+    gid_type n_cell_groups() const { return group_divs.size()-1; }
 };
 
 struct simulation {
     simulation(const cell_group_partition& p, const mock_parameters&);
-    virtual void run(time_type tfinal);
+    virtual void run(time_type tfinal) = 0;
+
+    virtual std::size_t n_ev_queued() const = 0;
+    virtual std::size_t n_recv_spike() const = 0;
+
+    std::size_t n_ev_delivered() const {
+        std::size_t n = 0;
+        for (auto& g: cell_groups_) n += g->n_delivered;
+        return n*n_rank_;
+    }
+
+    std::size_t n_spike() const {
+        std::size_t n = 0;
+        for (auto& g: cell_groups_) n += g->n_spike;
+        return n*n_rank_;
+    }
+
+    std::pair<time_type, time_type> time_minmax() const {
+        std::pair<time_type, time_type> minmax(INFINITY, -INFINITY);
+        for (auto& g: cell_groups_) {
+            minmax.first = std::min(minmax.first, g->t_);
+            minmax.second = std::max(minmax.second, g->t_);
+        }
+        return minmax;
+    }
+
+    virtual ~simulation() {}
 
     time_type min_delay_;
     cell_group_partition cell_group_gids_;
@@ -152,11 +162,21 @@ struct simulation {
 
 struct serial_simulation: simulation {
     serial_simulation(const cell_group_partition& p, const mock_parameters&);
-    void run(time_type tfinal, time_type dt) override;
+    void run(time_type tfinal) override;
 
     void make_event_queues(const spike_vector&, std::vector<pse_vector>&);
     void setup_events(time_type t0, time_type t1);
-    std::vector<pse_vector> pending_events_; // events from spike exchange per gid
-    std::vector<pse_vector> event_queus_; // events to deliver per gid
-};
+    spike_vector spike_exchange(const spike_vector&);
 
+    std::size_t n_ev_queued() const override {
+        std::size_t n = 0;
+        for (auto& evs: event_queues_) n += evs.size();
+        return n;
+    }
+
+    std::size_t n_recv_spike() const override { return n_recv_spike_; }
+
+    std::size_t n_recv_spike_ = 0;
+    std::vector<pse_vector> pending_events_; // events from spike exchange per gid
+    std::vector<pse_vector> event_queues_; // events to deliver per gid
+};
