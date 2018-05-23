@@ -26,7 +26,32 @@ struct global_options {
     double sim_time = 1000.;
     std::vector<int> group_sizes = {1};
     bool help = false;
+    bool verbose = false;
 };
+
+template <typename T>
+struct delimited_wrapper {
+    const T& items;
+    const std::string& delimiter;
+
+    delimited_wrapper(const T& items, const std::string& delimiter):
+        items(items), delimiter(delimiter) {}
+
+    friend std::ostream& operator<<(std::ostream& out, const delimited_wrapper& w) {
+        bool tail = false;
+        for (auto& item: w.items) {
+            if (tail) out << w.delimiter;
+            out << item;
+            tail = true;
+        }
+        return out;
+    }
+};
+
+template <typename T>
+delimited_wrapper<T> delimited(const T& item, const std::string& delimiter) {
+    return delimited_wrapper<T>(item, delimiter);
+}
 
 struct sputs: public std::ostream {
     sputs(): sputs(std::cout) {}
@@ -41,25 +66,41 @@ int main(int argc, char** argv) {
         global_options opt;
         delimited_parser<int> csv(",");
 
-        auto help = [&opt]() { opt.help = true; };
-
         for (auto arg = argv+1; *arg; ) {
-            help              << parse_opt(arg, 'h', "help") ||
-            opt.n_cell        << parse_opt<int>(arg, 'n', "cells") ||
-            opt.sim_time      << parse_opt<double>(arg, 't', "time") ||
-            opt.group_sizes   << parse_opt<std::vector<int>>(arg, 'g', "group-size", csv) ||
-            mparam.n_rank     << parse_opt<int>(arg, 'N', "ranks") ||
-            mparam.fanout     << parse_opt<int>(arg, 'F', "fanout") ||
-            mparam.min_delay  << parse_opt<double>(arg, 'M', "min-delay") ||
-            mparam.mean_spike_rate    << parse_opt<double>(arg, 'r', "spike-rate") ||
-            mparam.busy_wait_advance  << parse_opt<double>(arg, 0, "advance-time") ||
-            mparam.busy_wait_exchange << parse_opt<double>(arg, 0, "exchange-time") ||
+            [&]() {opt.help = true; }    << parse_opt(arg, 'h', "help") ||
+            [&]() {opt.verbose = true; } << parse_opt(arg, 'v', "verbose") ||
+            opt.n_cell                   << parse_opt<int>(arg, 'n', "cells") ||
+            opt.sim_time                 << parse_opt<double>(arg, 't', "time") ||
+            opt.group_sizes              << parse_opt<std::vector<int>>(arg, 'g', "group-size", csv) ||
+            mparam.n_rank                << parse_opt<int>(arg, 'N', "ranks") ||
+            mparam.fanout                << parse_opt<int>(arg, 'F', "fanout") ||
+            mparam.min_delay             << parse_opt<double>(arg, 'M', "min-delay") ||
+            mparam.mean_spike_rate       << parse_opt<double>(arg, 'r', "spike-rate") ||
+            mparam.rng_seed              << parse_opt<int>(arg, 's', "seed") ||
+            mparam.busy_wait_advance     << parse_opt<double>(arg, 0, "advance-time") ||
+            mparam.busy_wait_exchange    << parse_opt<double>(arg, 0, "exchange-time") ||
             (throw to::parse_opt_error(*arg, "unrecognized option"), false);
         }
 
         if (opt.help) {
             to::usage(argv[0], usage_str);
             return 0;
+        }
+
+        if (opt.verbose) {
+            std::cout
+                << "option summary:\n"
+                << "number of cells:         " << opt.n_cell << "\n"
+                << "simulation time:         " << opt.sim_time << "\n"
+                << "cell group sizes:        " << delimited(opt.group_sizes, ", ") << "\n"
+                << "virtual ranks:           " << mparam.n_rank << "\n"
+                << "spike fanout:            " << mparam.fanout << "\n"
+                << "min spike delay:         " << mparam.min_delay << "\n"
+                << "mean spike rate:         " << mparam.mean_spike_rate << "\n"
+                << "rng seed:                " << mparam.rng_seed << "\n"
+                << "advance busy-wait time:  " << mparam.busy_wait_advance << "\n"
+                << "exchange busy-wait time: " << mparam.busy_wait_exchange << "\n"
+                << "\n";
         }
 
         std::vector<gid_type> groups;
@@ -83,12 +124,37 @@ int main(int argc, char** argv) {
         auto sim = std::unique_ptr<simulation>(new serial_simulation(partn, mparam));
         sim->run(opt.sim_time);
 
-        sputs() << "events delivered: " << sim->n_ev_delivered();
-        sputs() << "events queued:    " << sim->n_ev_queued();
-        sputs() << "spikes generated: " << sim->n_spike();
-        sputs() << "spikes received: " << sim->n_recv_spike();
-        auto mm = sim->time_minmax();
-        sputs() << "cell group times: " << mm.first << ',' << mm.second;
+        auto group_time_span = sim->time_minmax();
+        if (opt.verbose) {
+            std::cout
+                << "simulation summary:\n"
+                << "events delivered: " << sim->n_ev_delivered() << "\n"
+                << "events queued:    " << sim->n_ev_queued() << "\n"
+                << "spikes generated: " << sim->n_spike() << "\n"
+                << "spikes received:  " << sim->n_recv_spike() << "\n"
+                << "cell group times: " << group_time_span.first << "--" << group_time_span.second << "\n";
+        }
+
+        // Check event counts:
+        auto n_ev_total = sim->n_ev_delivered()+sim->n_ev_queued();
+        auto n_spike_out = sim->n_spike();
+        auto n_spike_in = sim->n_recv_spike();
+        if (n_spike_in!=n_spike_out) {
+            std::cout << "error: spike discrepancy (in/out): " << n_spike_in << '/' << n_spike_out << "\n";
+        }
+        auto n_ev_expected = n_spike_out*mparam.fanout;
+        if (n_ev_total!=n_ev_expected) {
+            std::cout << "error: spike--event discrepancy (events/spike*fanout): "
+                << n_ev_total << '/' << n_ev_expected << "\n";
+        }
+        if (group_time_span.first!=group_time_span.second) {
+            std::cout << "error: cell group time discrepancy (min/max): "
+                << group_time_span.first << '/' << group_time_span.second << "\n";
+        }
+        if (group_time_span.second!=opt.sim_time) {
+            std::cout << "error: cell group time--sim time discrepancy (group/sim): "
+                << group_time_span.second << '/' << opt.sim_time << "\n";
+        }
         return 0;
     }
     catch (to::parse_opt_error& e) {

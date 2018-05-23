@@ -110,7 +110,7 @@ void serial_simulation::run(time_type t_final) {
         local_spikes.clear();
         make_event_queues(global_spikes, pending_events_);
 
-        ep = ep.advance(t_step);
+        ep = ep.advance(t_step, t_final);
     }
 
     setup_events(ep.t0, ep.t1);

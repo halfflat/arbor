@@ -28,9 +28,9 @@ struct epoch {
 
     epoch& operator=(const epoch&) = default;
 
-    epoch advance(float t_step) const {
+    epoch advance(time_type t_step, time_type t_final) const {
         assert(t_step>0);
-        return epoch(id+1, t1, t1+t_step);
+        return epoch(id+1, t1, std::min(t1+t_step, t_final));
     }
 };
 

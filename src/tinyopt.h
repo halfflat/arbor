@@ -77,12 +77,12 @@ struct maybe<void> {
 };
 
 template <typename F, typename T>
-auto operator<<(F& f, const maybe<T>& m) -> maybe<std::decay_t<decltype(f(*m))>> {
+auto operator<<(F&& f, const maybe<T>& m) -> maybe<std::decay_t<decltype(f(*m))>> {
     if (m) return f(*m); else return nothing;
 }
 
 template <typename F>
-auto operator<<(F& f, const maybe<void>& m) -> maybe<std::decay_t<decltype(f())>> {
+auto operator<<(F&& f, const maybe<void>& m) -> maybe<std::decay_t<decltype(f())>> {
     if (m) return f(), maybe<void>(1); else return nothing;
 }
 
