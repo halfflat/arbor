@@ -86,7 +86,7 @@ TEST(synapses, syn_basic_state) {
     ASSERT_TRUE(exp2syn);
 
     auto align = std::max(expsyn->data_alignment(), exp2syn->data_alignment());
-    shared_state state(num_cell, std::vector<index_type>(num_comp, 0), align);
+    shared_state state(num_cell, std::vector<index_type>(num_comp, 0), std::vector<value_type>(num_comp, 0), align);
 
     state.reset(-65., constant::hh_squid_temp);
     fill(state.current_density, 1.0);

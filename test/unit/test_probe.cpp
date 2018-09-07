@@ -63,10 +63,9 @@ TEST(probe, fvm_lowered_cell) {
     auto resting = voltage[0];
     EXPECT_NE(0.0, resting);
 
-    // (Probe handles are just pointers in this implementation).
-    EXPECT_EQ(resting, *p0);
-    EXPECT_EQ(resting, *p1);
-    EXPECT_EQ(0.0, *p2);
+    EXPECT_EQ(resting, *p0.data);
+    EXPECT_EQ(resting, *p1.data);
+    EXPECT_EQ(0.0, *p2.data);
 
     // After an integration step, expect voltage probe values
     // to differ from resting, and between each other, and
@@ -77,11 +76,11 @@ TEST(probe, fvm_lowered_cell) {
 
     lcell.integrate(0.01, 0.0025, {}, {});
 
-    EXPECT_NE(resting, *p0);
-    EXPECT_NE(resting, *p1);
-    EXPECT_NE(*p0, *p1);
-    EXPECT_NE(0.0, *p2);
+    EXPECT_NE(resting, *p0.data);
+    EXPECT_NE(resting, *p1.data);
+    EXPECT_NE(*p0.data, *p1.data);
+    EXPECT_NE(0.0, *p2.data);
 
-    EXPECT_EQ(voltage[0], *p0);
+    EXPECT_EQ(voltage[0], *p0.data);
 }
 

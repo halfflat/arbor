@@ -153,7 +153,7 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
                 v_offset, width});
 
             for (auto t: sample_times) {
-                raw_probe_info r{unsigned(width), p.handle, n_samples++, v_offset};
+                raw_probe_info r{p.handle, n_samples++, v_offset};
                 sample_events.push_back(sample_event{t, cell_index, r});
                 v_offset += width;
             }

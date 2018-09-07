@@ -117,6 +117,7 @@ void ion_state::zero_current() {
 shared_state::shared_state(
     fvm_size_type n_cell,
     const std::vector<fvm_index_type>& cv_to_cell_vec,
+    const std::vector<fvm_value_type>& cv_area_vec,
     unsigned align
 ):
     alignment(min_alignment(align)),
@@ -130,6 +131,7 @@ shared_state::shared_state(
     dt_cv(n_cv, pad(alignment)),
     voltage(n_cv, pad(alignment)),
     current_density(n_cv, pad(alignment)),
+    cv_area(math::round_up(n_cv, alignment), pad(alignment)),
     temperature_degC(NAN),
     deliverable_events(n_cell)
 {
@@ -138,6 +140,9 @@ shared_state::shared_state(
     if (n_cv>0) {
         std::copy(cv_to_cell_vec.begin(), cv_to_cell_vec.end(), cv_to_cell.begin());
         std::fill(cv_to_cell.begin()+n_cv, cv_to_cell.end(), cv_to_cell_vec.back());
+
+        std::copy(cv_area_vec.begin(), cv_area_vec.end(), cv_area.begin());
+        std::fill(cv_area.begin()+n_cv, cv_area.end(), cv_area.back());
     }
 }
 
@@ -225,10 +230,18 @@ void shared_state::take_samples(
         auto begin = s.begin_marked(i);
         auto end = s.end_marked(i);
 
-        // (Note: probably not worth explicitly vectorizing this.)
         for (auto p = begin; p<end; ++p) {
             sample_time[p->t_offset] = time[i];
-            std::memcpy(sample_value.data()+p->v_offset, p->handle, p->count*sizeof(*p->handle));
+            auto handle = p->handle;
+            if (handle.weight) {
+                // TODO: candidate for vectorization.
+                for (fvm_size_type i = 0; i<handle.count; ++i) {
+                    sample_value[p->v_offset+i] = handle.data[i]*handle.weight[i];
+                }
+            }
+            else {
+                std::memcpy(sample_value.data()+p->v_offset, handle.data, handle.count*sizeof(*handle.data));
+            }
         }
     }
 }

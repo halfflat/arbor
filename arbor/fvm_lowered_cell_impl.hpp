@@ -363,7 +363,7 @@ void fvm_lowered_cell_impl<B>::initialize(
         util::transform_view(keys(mech_data.mechanisms),
             [&](const std::string& name) { return mech_instance(name)->data_alignment(); }));
 
-    state_ = std::make_unique<shared_state>(ncell, D.cv_to_cell, data_alignment? data_alignment: 1u);
+    state_ = std::make_unique<shared_state>(ncell, D.cv_to_cell, D.cv_area, data_alignment? data_alignment: 1u);
 
     // Instantiate mechanisms and ions.
 
@@ -442,21 +442,43 @@ void fvm_lowered_cell_impl<B>::initialize(
             probe_info pi = rec.get_probe({gid, j});
             auto where = any_cast<cell_probe_address>(pi.address);
 
-            auto cv = D.segment_location_to_cv(cell_idx, where.location);
-            probe_handle handle;
+            fvm_size_type cv;
+            probe_handle handle{nullptr, nullptr, 1u};
+            std::vector<segment_location> probe_locations;
 
             switch (where.kind) {
             case mc_cell_probe_kind::voltage:
-                handle = state_->voltage.data()+cv;
+                probe_locations.push_back(where.location);
+                cv = D.segment_location_to_cv(cell_idx, where.location);
+                handle.data = state_->voltage.data()+cv;
                 break;
             case mc_cell_probe_kind::current_density:
-                handle = state_->current_density.data()+cv;
+                probe_locations.push_back(where.location);
+                cv = D.segment_location_to_cv(cell_idx, where.location);
+                handle.data = state_->current_density.data()+cv;
+                break;
+            case mc_cell_probe_kind::cv_currents:
+                {
+                    auto cvs = D.cell_cv_part()[cell_idx];
+                    handle.data = state_->current_density.data()+cvs.first;
+                    handle.weight = state_->cv_area.data()+cvs.first;
+                    handle.count = cvs.second-cvs.first;
+
+                    auto segs = D.cell_segment_part()[cell_idx];
+                    auto nseg = segs.second-segs.first;
+                    for (unsigned i = 0; i<nseg; ++i) {
+                        auto seg = D.segments[segs.first+i];
+                        for (auto cv: make_span(seg.cv_range())) {
+                            probe_locations.push_back({i, seg.cv_distal_distance(cv)});
+                        }
+                    }
+                    arb_assert(handle.count==probe_locations.size());
+                }
                 break;
             default:
                 throw arbor_internal_error("fvm_lowered_cell: unrecognized probeKind");
             }
 
-            std::vector<segment_location> probe_locations = {where.location};
             probe_metadata_.push_back({where.kind, probe_locations});
 
             const auto& meta = probe_metadata_.back();
