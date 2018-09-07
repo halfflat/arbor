@@ -220,11 +220,11 @@ sample_trace make_trace(const probe_info& probe) {
 
     auto addr = any_cast<cell_probe_address>(probe.address);
     switch (addr.kind) {
-    case cell_probe_address::membrane_voltage:
+    case mc_cell_probe_kind::voltage:
         name = "v";
         units = "mV";
         break;
-    case cell_probe_address::membrane_current:
+    case mc_cell_probe_kind::current_density:
         name = "i";
         units = "mA/cm²";
         break;

@@ -29,7 +29,7 @@ class simple_sampler {
 public:
     explicit simple_sampler(trace_data<V>& trace): trace_(trace) {}
 
-    void operator()(cell_member_type probe_id, probe_tag tag, std::size_t n, const sample_record* recs) {
+    void operator()(cell_member_type probe_id, probe_tag tag, util::any_ptr metadata, std::size_t n, const sample_record* recs) {
         for (std::size_t i = 0; i<n; ++i) {
             if (auto p = util::any_cast<const V*>(recs[i].data)) {
                 trace_.push_back({recs[i].time, *p});

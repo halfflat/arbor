@@ -55,13 +55,26 @@ struct i_clamp {
 
 // Probe type for cell descriptions.
 
-struct cell_probe_address {
-    enum probe_kind {
-        membrane_voltage, membrane_current
-    };
+enum class mc_cell_probe_kind {
+    voltage,          // membrane voltage [mV]
+    current_density,  // membrane current density [A/m²]
+    cv_currents,      // total current flux for each CV on cell [nA]
+};
 
-    segment_location location;
-    probe_kind kind;
+struct cell_probe_address {
+    mc_cell_probe_kind kind;
+    segment_location location; // not applicable for `cv_currents`.
+};
+
+// Sample result data types.
+
+using mc_cell_sample_ptr = const double*;
+
+// Probe metadata type.
+
+struct mc_cell_probe_metadata {
+    mc_cell_probe_kind kind;
+    std::vector<segment_location> locations;
 };
 
 // Global parameter type for cell descriptions.

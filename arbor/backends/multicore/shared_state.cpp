@@ -227,8 +227,8 @@ void shared_state::take_samples(
 
         // (Note: probably not worth explicitly vectorizing this.)
         for (auto p = begin; p<end; ++p) {
-            sample_time[p->offset] = time[i];
-            sample_value[p->offset] = *p->handle;
+            sample_time[p->t_offset] = time[i];
+            std::memcpy(sample_value.data()+p->v_offset, p->handle, p->count*sizeof(*p->handle));
         }
     }
 }

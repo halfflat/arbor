@@ -74,7 +74,7 @@ void run_ncomp_convergence_test(
         }
         cable1d_recipe rec{c};
         for (const auto& p: probe_points) {
-            rec.add_probe(0, 0, cell_probe_address{p.where, cell_probe_address::membrane_voltage});
+            rec.add_probe(0, 0, cell_probe_address{mc_cell_probe_kind::voltage, p.where});
         }
 
         auto decomp = partition_load_balance(rec, context);

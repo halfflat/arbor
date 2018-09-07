@@ -14,6 +14,7 @@
 #include <arbor/sampling.hpp>
 #include <arbor/simulation.hpp>
 #include <arbor/schedule.hpp>
+#include <arbor/util/any_ptr.hpp>
 
 #include "algorithms.hpp"
 #include "backends/multicore/fvm.hpp"
@@ -77,6 +78,7 @@ ACCESS_BIND(\
 
 
 using namespace arb;
+using arb::util::any_ptr;
 
 TEST(fvm_lowered, matrix_init)
 {
@@ -285,7 +287,7 @@ TEST(fvm_lowered, derived_mechs) {
     cable1d_recipe rec(cells);
     rec.catalogue().derive("custom_kin1", "test_kin1", {{"tau", 20.0}});
 
-    cell_probe_address where{{1, 0.3}, cell_probe_address::membrane_current};
+    cell_probe_address where{mc_cell_probe_kind::current_density, {1, 0.3}};
     rec.add_probe(0, 0, where);
     rec.add_probe(1, 0, where);
     rec.add_probe(2, 0, where);
@@ -325,7 +327,7 @@ TEST(fvm_lowered, derived_mechs) {
 
         std::vector<double> samples[3];
 
-        sampler_function sampler = [&](cell_member_type pid, probe_tag, std::size_t n, const sample_record* records) {
+        sampler_function sampler = [&](cell_member_type pid, probe_tag, any_ptr probe_meta, std::size_t n, const sample_record* records) {
             for (std::size_t i = 0; i<n; ++i) {
                 double v = *util::any_cast<const double*>(records[i].data);
                 samples[pid.gid].push_back(v);

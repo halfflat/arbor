@@ -32,9 +32,9 @@ TEST(probe, fvm_lowered_cell) {
     segment_location loc1{1, 1};
     segment_location loc2{1, 0.3};
 
-    rec.add_probe(0, 10, cell_probe_address{loc0, cell_probe_address::membrane_voltage});
-    rec.add_probe(0, 20, cell_probe_address{loc1, cell_probe_address::membrane_voltage});
-    rec.add_probe(0, 30, cell_probe_address{loc2, cell_probe_address::membrane_current});
+    rec.add_probe(0, 10, cell_probe_address{mc_cell_probe_kind::voltage, loc0});
+    rec.add_probe(0, 20, cell_probe_address{mc_cell_probe_kind::voltage, loc1});
+    rec.add_probe(0, 30, cell_probe_address{mc_cell_probe_kind::current_density, loc2});
 
     std::vector<target_handle> targets;
     probe_association_map<probe_handle> probe_map;

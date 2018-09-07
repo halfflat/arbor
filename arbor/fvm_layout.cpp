@@ -347,7 +347,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const mechanism_catalogue& catalogue
 
         for (const auto& cellsyn: cell.synapses()) {
             const mechanism_desc& desc = cellsyn.mechanism;
-            size_type cv = D.segment_location_cv(cell_idx, cellsyn.location);
+            size_type cv = D.segment_location_to_cv(cell_idx, cellsyn.location);
             const auto& name = desc.name();
 
             point_mech_data& entry = point_mech_table[name];
@@ -361,7 +361,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const mechanism_catalogue& catalogue
         }
 
         for (const auto& stimulus: cell.stimuli()) {
-            size_type cv = D.segment_location_cv(cell_idx, stimulus.location);
+            size_type cv = D.segment_location_to_cv(cell_idx, stimulus.location);
             stimuli.push_back({cv, stimulus.clamp});
         }
     }

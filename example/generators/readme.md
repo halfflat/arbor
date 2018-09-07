@@ -154,7 +154,7 @@ In our case, the cell has one probe, which refers to the voltage at the soma.
 
     arb::probe_info get_probe(cell_member_type id) const override {
         // Get the appropriate kind for measuring voltage
-        cell_probe_address::probe_kind kind = cell_probe_address::membrane_voltage;
+        auto kind = mc_cell_probe_kind::voltage;
 
         // The location at which we measure: position 0 on segment 0.
         // The cell has only one segment, segment 0, which is the soma.

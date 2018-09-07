@@ -4,6 +4,7 @@
 
 #include <arbor/assert.hpp>
 #include <arbor/common_types.hpp>
+#include <arbor/mc_cell.hpp>
 #include <arbor/sampling.hpp>
 #include <arbor/recipe.hpp>
 #include <arbor/spike.hpp>
@@ -39,10 +40,6 @@ mc_cell_group::mc_cell_group(const std::vector<cell_gid_type>& gids, const recip
     util::make_partition(target_handle_divisions_,
             util::transform_view(gids_, [&rec](cell_gid_type i) { return rec.num_targets(i); }));
     std::size_t n_targets = target_handle_divisions_.back();
-
-    // Pre-allocate space to store handles, probe map.
-    auto n_probes = util::sum_by(gids_, [&rec](cell_gid_type i) { return rec.num_probes(i); });
-    probe_map_.reserve(n_probes);
     target_handles_.reserve(n_targets);
 
     // Construct cell implementation, retrieving handles and maps. 
@@ -114,10 +111,17 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
         sampler_function sampler;
         cell_member_type probe_id;
         probe_tag tag;
+        util::any_ptr probe_metadata;
 
-        // Offsets are into lowered cell sample time and event arrays.
-        sample_size_type begin_offset;
-        sample_size_type end_offset;
+        // Offsets into lowered cell sample time array.
+        sample_size_type t_begin_offset;
+        sample_size_type t_end_offset;
+
+        // Initial offset into sample value array.
+        sample_size_type v_offset;
+
+        // How many values in the value array used per call.
+        sample_size_type width;
     };
 
     PE(advance_samplesetup);
@@ -125,6 +129,7 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
 
     std::vector<sample_event> sample_events;
     sample_size_type n_samples = 0;
+    sample_size_type v_offset = 0;
     sample_size_type max_samples_per_call = 0;
 
     for (auto& sa: sampler_map_) {
@@ -139,12 +144,18 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
         for (cell_member_type pid: sa.probe_ids) {
             auto cell_index = gid_index_map_.at(pid.gid);
             auto p = probe_map_[pid];
+            auto metadata = p.metadata.as<const mc_cell_probe_metadata*>();
+            sample_size_type width = metadata->locations.size();
 
-            call_info.push_back({sa.sampler, pid, p.tag, n_samples, n_samples+n_times});
+            call_info.push_back({
+                sa.sampler, pid, p.tag, p.metadata,
+                n_samples, n_samples+n_times,
+                v_offset, width});
 
             for (auto t: sample_times) {
-                sample_event ev{t, cell_index, {p.handle, n_samples++}};
-                sample_events.push_back(ev);
+                raw_probe_info r{unsigned(width), p.handle, n_samples++, v_offset};
+                sample_events.push_back(sample_event{t, cell_index, r});
+                v_offset += width;
             }
         }
     }
@@ -166,11 +177,14 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
 
     for (auto& sc: call_info) {
         sample_records.clear();
-        for (auto i = sc.begin_offset; i!=sc.end_offset; ++i) {
-           sample_records.push_back(sample_record{time_type(result.sample_time[i]), &result.sample_value[i]});
+
+        sample_size_type v_offset = sc.v_offset;
+        for (auto i = sc.t_begin_offset; i!=sc.t_end_offset; ++i) {
+            sample_records.push_back(sample_record{time_type(result.sample_time[i]), &result.sample_value[v_offset]});
+            v_offset += sc.width;
         }
 
-        sc.sampler(sc.probe_id, sc.tag, sc.end_offset-sc.begin_offset, sample_records.data());
+        sc.sampler(sc.probe_id, sc.tag, sc.probe_metadata, sc.t_end_offset-sc.t_begin_offset, sample_records.data());
     }
     PL();
 

@@ -6,7 +6,7 @@
 #include <arbor/mechinfo.hpp>
 #include <arbor/mechcat.hpp>
 
-#include "fvm_compartment.hpp"
+#include "util/partition.hpp"
 #include "util/span.hpp"
 
 namespace arb {
@@ -44,6 +44,22 @@ struct segment_info {
             return parent_cv==npos? proximal_cv: parent_cv;
         }
     }
+
+    // Convert cv in segment to proportional distal distance.
+    // Returns 0 if not in segment.
+    double cv_distal_distance(index_type cv) {
+        if (cv<proximal_cv || cv>distal_cv) {
+            return 0;
+        }
+
+        // Special case for soma: report centre rather than
+        // point used for flux approximation.
+        if (cv==proximal_cv && !has_parent()) {
+            return 0.5;
+        }
+
+        return double(cv+1-proximal_cv)/(distal_cv+1-proximal_cv);
+    }
 };
 
 // Discretization of morphologies and electrical properties for
@@ -77,7 +93,7 @@ struct fvm_discretization {
         return util::partition_view(cell_cv_bounds);
     }
 
-    size_type segment_location_cv(size_type cell_index, segment_location segloc) const {
+    size_type segment_location_to_cv(size_type cell_index, segment_location segloc) const {
         auto cell_segs = cell_segment_part()[cell_index];
 
         size_type seg = segloc.segment+cell_segs.first;

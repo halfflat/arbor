@@ -115,27 +115,27 @@ public:
         // if we have both voltage and current probes, then order them
         // voltage compartment 0, current compartment 0, voltage compartment 1, ...
 
-        cell_probe_address::probe_kind kind;
+        mc_cell_probe_kind kind;
 
         int stride = pdist_.membrane_voltage+pdist_.membrane_current;
 
         if (stride==1) {
             // Just one kind of probe.
             kind = pdist_.membrane_voltage?
-                cell_probe_address::membrane_voltage: cell_probe_address::membrane_current;
+                mc_cell_probe_kind::voltage: mc_cell_probe_kind::current_density;
         }
         else {
             arb_assert(stride==2);
             // Both kinds available.
             kind = (probe_id.index%stride==0)?
-                cell_probe_address::membrane_voltage: cell_probe_address::membrane_current;
+                mc_cell_probe_kind::voltage: mc_cell_probe_kind::current_density;
         }
 
         cell_lid_type compartment = probe_id.index/stride;
         segment_location loc{compartment, compartment? 0.5: 0.0};
 
         // Use probe kind as the token to be passed to a sampler.
-        return {probe_id, (int)kind, cell_probe_address{loc, kind}};
+        return {probe_id, (int)kind, cell_probe_address{kind, loc}};
     }
 
     cell_kind get_cell_kind(cell_gid_type i) const override {

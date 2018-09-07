@@ -97,6 +97,10 @@ private:
     decltype(backend::host_view(sample_time_)) sample_time_host_;
     decltype(backend::host_view(sample_value_)) sample_value_host_;
 
+    // Host-side probe metadata: pointers to this are writen to
+    // supplied probe_association_map in init.
+    std::vector<mc_cell_probe_metadata> probe_metadata_;
+
     void update_ion_state();
 
     // Throw if absolute value of membrane voltage exceeds bounds.
@@ -303,11 +307,13 @@ void fvm_lowered_cell_impl<B>::initialize(
 
     std::vector<mc_cell> cells;
     const std::size_t ncell = gids.size();
+    std::size_t nprobe = 0;
 
     cells.reserve(ncell);
     for (auto gid: gids) {
         try {
             cells.push_back(any_cast<mc_cell>(rec.get_cell_description(gid)));
+            nprobe += rec.num_probes(gid);
         }
         catch (util::bad_any_cast&) {
             throw bad_cell_description(rec.get_cell_kind(gid), gid);
@@ -418,6 +424,9 @@ void fvm_lowered_cell_impl<B>::initialize(
 
     // Collect detectors, probe handles.
 
+    probe_map.reserve(nprobe);
+    probe_metadata_.reserve(nprobe);
+
     std::vector<index_type> detector_cv;
     std::vector<value_type> detector_threshold;
 
@@ -425,7 +434,7 @@ void fvm_lowered_cell_impl<B>::initialize(
         cell_gid_type gid = gids[cell_idx];
 
         for (auto detector: cells[cell_idx].detectors()) {
-            detector_cv.push_back(D.segment_location_cv(cell_idx, detector.location));
+            detector_cv.push_back(D.segment_location_to_cv(cell_idx, detector.location));
             detector_threshold.push_back(detector.threshold);
         }
 
@@ -433,21 +442,25 @@ void fvm_lowered_cell_impl<B>::initialize(
             probe_info pi = rec.get_probe({gid, j});
             auto where = any_cast<cell_probe_address>(pi.address);
 
-            auto cv = D.segment_location_cv(cell_idx, where.location);
+            auto cv = D.segment_location_to_cv(cell_idx, where.location);
             probe_handle handle;
 
             switch (where.kind) {
-            case cell_probe_address::membrane_voltage:
+            case mc_cell_probe_kind::voltage:
                 handle = state_->voltage.data()+cv;
                 break;
-            case cell_probe_address::membrane_current:
+            case mc_cell_probe_kind::current_density:
                 handle = state_->current_density.data()+cv;
                 break;
             default:
                 throw arbor_internal_error("fvm_lowered_cell: unrecognized probeKind");
             }
 
-            probe_map.insert({pi.id, {handle, pi.tag}});
+            std::vector<segment_location> probe_locations = {where.location};
+            probe_metadata_.push_back({where.kind, probe_locations});
+
+            const auto& meta = probe_metadata_.back();
+            probe_map.insert({pi.id, {handle, pi.tag, &meta}});
         }
     }
 

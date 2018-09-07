@@ -67,11 +67,11 @@ void run_synapse_test(
 
         cable1d_recipe rec{c};
         // soma.mid
-        rec.add_probe(0, 0, cell_probe_address{{0, 0.5}, cell_probe_address::membrane_voltage});
+        rec.add_probe(0, 0, cell_probe_address{mc_cell_probe_kind::voltage, {0, 0.5}});
         // dend.mid
-        rec.add_probe(0, 0, cell_probe_address{{1, 0.5}, cell_probe_address::membrane_voltage});
+        rec.add_probe(0, 0, cell_probe_address{mc_cell_probe_kind::voltage, {1, 0.5}});
         // dend.end
-        rec.add_probe(0, 0, cell_probe_address{{1, 1.0}, cell_probe_address::membrane_voltage});
+        rec.add_probe(0, 0, cell_probe_address{mc_cell_probe_kind::voltage, {1, 1.0}});
 
         auto decomp = partition_load_balance(rec, context);
         simulation sim(rec, decomp, context);
@@ -104,12 +104,12 @@ TEST(simple_synapse, exp2syn_neuron_ref) {
     {
         auto ctx = make_context(resources);
         SCOPED_TRACE("exp2syn-multicore");
-        run_synapse_test("exp2syn", "neuron_simple_exp_synapse.json", ctx);
+        run_synapse_test("exp2syn", "neuron_simple_exp2_synapse.json", ctx);
     }
     if (resources.has_gpu()) {
         resources.gpu_id = -1;
         auto ctx = make_context(resources);
         SCOPED_TRACE("exp2syn-gpu");
-        run_synapse_test("exp2syn", "neuron_simple_exp_synapse.json", ctx);
+        run_synapse_test("exp2syn", "neuron_simple_exp2_synapse.json", ctx);
     }
 }

@@ -18,10 +18,11 @@ static inline cell_member_predicate one_probe(cell_member_type pid) {
 
 struct sample_record {
     time_type time;
-    util::any_ptr data;
+    util::any_ptr data; // cell-group specific const pointer to sampled data
 };
 
-using sampler_function = std::function<void (cell_member_type, probe_tag, std::size_t, const sample_record*)>;
+// Note: underlying metadata type is cell-group specific.
+using sampler_function = std::function<void (cell_member_type, probe_tag, util::any_ptr metadata, std::size_t, const sample_record*)>;
 
 using sampler_association_handle = std::size_t;
 

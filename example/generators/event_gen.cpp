@@ -115,11 +115,11 @@ public:
         arb_assert(id.index==0);   // with one probe.
 
         // Get the appropriate kind for measuring voltage
-        cell_probe_address::probe_kind kind = cell_probe_address::membrane_voltage;
+        auto kind = arb::mc_cell_probe_kind::voltage;
         // Measure at the soma
         arb::segment_location loc(0, 0.0);
 
-        return arb::probe_info{id, kind, cell_probe_address{loc, kind}};
+        return arb::probe_info{id, 0, cell_probe_address{kind, loc}};
     }
 };
 

@@ -6,6 +6,7 @@
 #include <arbor/math.hpp>
 #include <arbor/mc_cell.hpp>
 
+#include "fvm_compartment.hpp"
 #include "fvm_layout.hpp"
 #include "util/maputil.hpp"
 #include "util/rangeutil.hpp"
@@ -207,6 +208,26 @@ TEST(fvm_layout, topology) {
             EXPECT_EQ(ci, (fvm_size_type)D.cv_to_cell[cv]);
         }
     }
+
+    // CV to segment location:
+
+    // CV<->position consistency
+    for (auto seg: D.segments) {
+        for (auto cv: make_span(seg.cv_range())) {
+            double p = seg.cv_distal_distance(cv);
+            EXPECT_EQ(cv, seg.cv_by_position(p));
+        }
+    }
+
+    // Explicit values based on discretization.
+    // Note: choice of position value for soma still not set in stone.
+    EXPECT_EQ(0.50, D.segments[0].cv_distal_distance(0));
+    EXPECT_EQ(0.50, D.segments[2].cv_distal_distance(5));
+
+    EXPECT_EQ(0.25, D.segments[1].cv_distal_distance(1));
+    EXPECT_EQ(0.50, D.segments[4].cv_distal_distance(11));
+    EXPECT_EQ(0.75, D.segments[5].cv_distal_distance(16));
+    EXPECT_EQ(1.00, D.segments[3].cv_distal_distance(9));
 }
 
 TEST(fvm_layout, area) {

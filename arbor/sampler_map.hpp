@@ -12,6 +12,7 @@
 #include <arbor/common_types.hpp>
 #include <arbor/sampling.hpp>
 #include <arbor/schedule.hpp>
+#include <arbor/util/any_ptr.hpp>
 
 #include "util/transform.hpp"
 
@@ -67,6 +68,7 @@ struct probe_association {
     using probe_handle_type = Handle;
     probe_handle_type handle;
     probe_tag tag;
+    util::any_ptr metadata;
 };
 
 template <typename Handle>

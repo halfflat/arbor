@@ -74,7 +74,7 @@ void validate_kinetic_kin1(const arb::context& ctx) {
     mc_cell c;
     auto soma = c.add_soma(10);
     soma->add_mechanism("test_kin1");
-    cell_probe_address probe{{0, 0.5}, cell_probe_address::membrane_current};
+    cell_probe_address probe{mc_cell_probe_kind::current_density, {0, 0.5}};
 
     nlohmann::json meta = {
         {"model", "test_kin1"},
@@ -93,7 +93,7 @@ void validate_kinetic_kinlva(const arb::context& ctx) {
     auto soma = c.add_soma(10);
     c.add_stimulus({0,0.5}, {20., 130., -0.025});
     soma->add_mechanism("test_kinlva");
-    cell_probe_address probe{{0, 0.5}, cell_probe_address::membrane_voltage};
+    cell_probe_address probe{mc_cell_probe_kind::voltage, {0, 0.5}};
 
     nlohmann::json meta = {
         {"model", "test_kinlva"},

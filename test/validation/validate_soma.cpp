@@ -27,7 +27,7 @@ void validate_soma(const context& context) {
     mc_cell c = make_cell_soma_only();
 
     cable1d_recipe rec{c};
-    rec.add_probe(0, 0, cell_probe_address{{0, 0.5}, cell_probe_address::membrane_voltage});
+    rec.add_probe(0, 0, cell_probe_address{mc_cell_probe_kind::voltage, {0, 0.5}});
     probe_label plabels[1] = {{"soma.mid", {0u, 0u}}};
 
     auto decomp = partition_load_balance(rec, context);

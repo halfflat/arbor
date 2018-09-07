@@ -54,8 +54,10 @@ inline deliverable_event_data event_data(const deliverable_event& ev) {
 using probe_handle = const fvm_value_type*;
 
 struct raw_probe_info {
-    probe_handle handle;      // where the to-be-probed value sits
-    sample_size_type offset;  // offset into array to store raw probed value
+    unsigned count;           // number of (contiguously stored) values to probe
+    probe_handle handle;      // address of first value to probe
+    sample_size_type t_offset;  // offset into array to store sample time
+    sample_size_type v_offset;  // offset into array to store raw probed values
 };
 
 struct sample_event {
