@@ -4,3 +4,20 @@
 [submodule "sphinx_rtd_theme"]
 	path = ext/sphinx_rtd_theme
 	url = https://github.com/rtfd/sphinx_rtd_theme.git
+[submodule "ext/catch"]
+	path = ext/catch
+	url = https://github.com/catchorg/Catch2
+[submodule "ext/conduit"]
+	path = ext/conduit
+	url = https://github.com/LLNL/conduit
+[submodule "ext/cppzmq"]
+	path = ext/cppzmq
+	url = https://github.com/zeromq/cppzmq
+[submodule "ext/nesci"]
+	path = ext/nesci
+	url = https://github.com/halfflat/nesci
+	branch = risotto
+[submodule "ext/contra"]
+	path = ext/contra
+	url = https://github.com/halfflat/contra
+	branch = risotto

@@ -1,15 +1,15 @@
 # Call to ensure that the git submodule in location `path` is loaded.
 # If the submodule is not loaded, an error message that describes
 # how to update the submodules is printed.
-# Sets the variable name_avail to `ON` if the submodule is available,
+# Sets the variable given in success_var to `ON` if the submodule is available,
 # or `OFF` otherwise.
 
-function(check_git_submodule name path)
-    set(success_var "${name}_avail")
+function(check_git_submodule success_var path)
     set(${success_var} ON PARENT_SCOPE)
 
     get_filename_component(dotgit "${path}/.git" ABSOLUTE)
-    if(NOT EXISTS ${dotgit})
+    get_filename_component(name "${path}" NAME)
+    if(NOT EXISTS ${dotgit} AND NOT "QUIET" IN_LIST ARGN)
         message(
             "\nThe git submodule for ${name} is not available.\n"
             "To check out all submodules use the following commands:\n"
