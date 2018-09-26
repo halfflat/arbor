@@ -25,18 +25,20 @@ struct mc_cell_error: arbor_exception {
 // Location specification for point processes.
 
 struct segment_location {
+    segment_location() = default;
+
     segment_location(cell_lid_type s, double l):
         segment(s), position(l)
     {
         arb_assert(position>=0. && position<=1.);
     }
 
-     bool operator==(segment_location other) const {
+    bool operator==(segment_location other) const {
         return segment==other.segment && position==other.position;
     }
 
-    cell_lid_type segment;
-    double position;
+    cell_lid_type segment = 0;
+    double position = 0;
 };
 
 // Current clamp description for stimulus specification.
