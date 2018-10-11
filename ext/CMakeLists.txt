@@ -45,153 +45,6 @@ add_dependencies(ext-benchmark gbench)
 target_include_directories(ext-benchmark INTERFACE "${gbench_install_dir}/include")
 target_link_libraries(ext-benchmark INTERFACE "${gbench_install_dir}/lib/libbenchmark.a")
 
-# Libraries, cmake configs/modules for contra.
-# Contra requires Catch2, conduit, [...] to be able to be found via find_package().
-
-set(ext-cmake-module-path ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_BINARY_DIR}/share/cmake")
-set(ext-cmake-prefix-path ${CMAKE_PREFIX_PATH})
-
-# Yes, really.
-string(REPLACE ";" ":" _ext-cmake-module-path-with-colon "${ext-cmake-module-path}")
-string(REPLACE ";" ":" _ext-cmake-prefix-path-with-colon "${ext-cmake-prefix-path}")
-set(def-cmake-paths-with-colon
-     "-DCMAKE_MODULE_PATH=${_ext-cmake-module-path-with-colon}"
-     "-DCMAKE_PREFIX_PATH=${_ext-cmake-prefix-path-with-colon}")
-
-# Catch library for contra
-
-find_package(Catch2 QUIET)
-if(NOT Catch2_FOUND)
-    check_git_submodule(catch_avail catch)
-    if(catch_avail)
-        set(catch_src_dir "${CMAKE_CURRENT_SOURCE_DIR}/catch")
-        set(catch_install_dir "${CMAKE_CURRENT_BINARY_DIR}")
-        set(catch_cmake_args
-            ${def-cmake-paths-with-colon}
-            "-DCATCH_BUILD_TESTING=OFF"
-            "-DCATCH_BUILD_EXAMPLES=OFF"
-            "-DCATCH_INSTALL_DOCS=OFF"
-            "-DCATCH_INSTALL_HELPERS=OFF"
-            "-DCMAKE_BUILD_TYPE=release"
-            "-DCMAKE_INSTALL_PREFIX=${catch_install_dir}"
-            "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
-
-        ExternalProject_Add(catch
-            SOURCE_DIR "${catch_src_dir}"
-            INSTALL_DIR "${catch_install_dir}"
-            STEP_TARGETS build
-            LIST_SEPARATOR :
-            CMAKE_ARGS "${catch_cmake_args}"
-        )
-    else()
-        add_error_target(catch
-            "Building Catch2 library"
-            "The git submodule for conduit is not available")
-
-    endif()
-endif()
-
-# Conduit library for contra and nesci
-# Note: Findconduit.cmake provided in toplevel cmake subdirectory.
-
-find_package(conduit QUIET)
-if(NOT conduit_FOUND)
-    check_git_submodule(conduit_avail conduit)
-    if(conduit_avail)
-        set(conduit_src_dir "${CMAKE_CURRENT_SOURCE_DIR}/conduit/src")
-        set(conduit_install_dir "${CMAKE_CURRENT_BINARY_DIR}")
-        set(conduit_cmake_args
-            ${def-cmake-paths-with-colon}
-            "-DENABLE_TESTS=OFF"
-            "-DENABLE_DOCS=OFF"
-            "-DCMAKE_SKIP_RPATH=ON"
-            "-DCMAKE_BUILD_TYPE=release"
-            "-DCMAKE_INSTALL_PREFIX=${conduit_install_dir}"
-            "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
-            "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
-
-        ExternalProject_Add(conduit
-            SOURCE_DIR "${conduit_src_dir}"
-            INSTALL_DIR "${conduit_install_dir}"
-            STEP_TARGETS build
-            LIST_SEPARATOR :
-            CMAKE_ARGS "${conduit_cmake_args}"
-        )
-    else()
-        add_error_target(conduit
-            "Building conduit library"
-            "The git submodule for conduit is not available")
-    endif()
-endif()
-
-# ZeroMQ C++ binding for contra.
-
-find_package(cppzmq QUIET)
-if(NOT cppzmq_FOUND)
-    check_git_submodule(cppzmq_avail cppzmq)
-    if(cppzmq_avail)
-        set(cppzmq_src_dir "${CMAKE_CURRENT_SOURCE_DIR}/cppzmq")
-        set(cppzmq_install_dir "${CMAKE_CURRENT_BINARY_DIR}")
-        set(cppzmq_cmake_args
-            ${def-cmake-paths-with-colon}
-            "-DENABLE_DRAFTS=OFF"
-            "-DCPPZMQ_BUILD_TESTS=OFF"
-            "-DCMAKE_BUILD_TYPE=release"
-            "-DCMAKE_INSTALL_PREFIX=${cppzmq_install_dir}"
-            "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
-            "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
-
-        ExternalProject_Add(cppzmq
-            SOURCE_DIR "${cppzmq_src_dir}"
-            INSTALL_DIR "${cppzmq_install_dir}"
-            STEP_TARGETS build
-            LIST_SEPARATOR :
-            CMAKE_ARGS "${cppzmq_cmake_args}"
-        )
-    else()
-        add_error_target(cppzmq
-            "Building cppzmq library"
-            "The git submodule for cppzmq is not available")
-    endif()
-endif()
-
-# Contra library
-
-find_package(contra QUIET)
-if(NOT contra_FOUND)
-    check_git_submodule(contra_avail contra)
-    if(contra_avail)
-        set(contra_src_dir "${CMAKE_CURRENT_SOURCE_DIR}/contra")
-        set(contra_install_dir "${CMAKE_CURRENT_BINARY_DIR}")
-        set(contra_cmake_args
-            ${def-cmake-paths-with-colon}
-            "-DCONDUIT_DIR=${conduit_install_dir}"
-            "-DCMAKE_BUILD_TYPE=release"
-            "-DCMAKE_INSTALL_PREFIX=${contra_install_dir}"
-            "-DCMAKE_PREFIX_PATH=${CMAKE_CURRENT_BINARY_DIR}"
-            "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
-            "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}")
-
-        ExternalProject_Add(contra
-            SOURCE_DIR "${contra_src_dir}"
-            INSTALL_DIR "${contra_install_dir}"
-            DEPENDS catch conduit
-            STEP_TARGETS build
-            LIST_SEPARATOR :
-            CMAKE_ARGS "${contra_cmake_args}"
-        )
-
-        # TODO: make ext-contra interface library here that depends upon contra target
-    else()
-        add_error_target(conta
-            "Building contra library"
-            "The git submodule for contra is not available")
-    endif()
-else()
-    # TODO: How does contra export itself?
-    add_library(ext-contra ALIAS contra::contra)
-endif()
-
 # Sphinx RTD theme
 
 check_git_submodule(rtdtheme_avail sphinx_rtd_theme)
@@ -203,3 +56,159 @@ add_target_if(rtdtheme_avail
 add_library(ext-sphinx_rtd_theme INTERFACE)
 add_dependencies(ext-sphinx_rtd_theme check-sphinx_rtd_theme)
 target_include_directories(ext-sphinx_rtd_theme INTERFACE sphinx_rtd_theme)
+
+# Libraries, cmake configs/modules for contra.
+# Contra requires Catch2, conduit, [...] to be able to be found via find_package().
+
+# Force re-configure of cmake if external packages are built.
+set(reconfigure_tag "${CMAKE_CURRENT_BINARY_DIR}/_force_reconfigure.cmake")
+if(NOT EXISTS "${reconfigure_tag}")
+    file(TOUCH "${reconfigure_tag}")
+endif()
+include("${reconfigure_tag}")
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_BINARY_DIR}/share/cmake")
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_BINARY_DIR}")
+
+include(CMakeParseArguments)
+function(add_external_cmake_submodule sub)
+    cmake_parse_arguments(arg "" "SOURCE_DIR;TARGET;UNLESS" "CMAKE_ARGS;DEPENDS" ${ARGN})
+
+    set(target "${sub}")
+    if(arg_TARGET)
+        set(target "${arg_TARGET}")
+    endif()
+
+    if(${arg_UNLESS})
+        # Make dummy target for building
+        add_custom_target("${target}" COMMAND true COMMENT "")
+        message(STATUS "${arg_UNLESS} true; making dummy target ${target}")
+    else()
+        message(STATUS "${arg_UNLESS} false; making external project target ${target}")
+        set(_submodule_avail)
+        check_git_submodule(_submodule_avail ${sub})
+        if(_submodule_avail)
+            set(cmake_module_path ${CMAKE_MODULE_PATH})
+            set(cmake_prefix_path ${CMAKE_PREFIX_PATH})
+            string(REPLACE ";" ":" cmake_module_path "${cmake_module_path}")
+            string(REPLACE ";" ":" cmake_prefix_path "${cmake_prefix_path}")
+
+            set(src_dir "${CMAKE_CURRENT_SOURCE_DIR}/${sub}")
+            if(arg_SOURCE_DIR)
+                set(src_dir "${arg_SOURCE_DIR}")
+            endif()
+
+            set(install_dir "${CMAKE_CURRENT_BINARY_DIR}")
+
+            set(cmake_args
+                "-DCMAKE_MODULE_PATH=${cmake_module_path}"
+                "-DCMAKE_PREFIX_PATH=${cmake_prefix_path}"
+                "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
+                "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
+                "-DCMAKE_INSTALL_PREFIX=${install_dir}"
+                "-DCMAKE_BUILD_TYPE=release"
+                ${arg_CMAKE_ARGS})
+
+            ExternalProject_Add(${target}
+                SOURCE_DIR ${src_dir}
+                INSTALL_DIR "${install_dir}"
+                STEP_TARGETS build
+                DEPENDS ${arg_DEPENDS}
+                LIST_SEPARATOR :
+                CMAKE_ARGS "${cmake_args}"
+            )
+
+            ExternalProject_Add_Step(${target} reconfigure
+                COMMAND "${CMAKE_COMMAND}" -E touch "${reconfigure_tag}"
+                DEPENDEES install
+            )
+        else()
+            add_error_target(${sub}
+                "Building ${sub} library"
+                "The git submodule for ${sub} is not available")
+        endif()
+    endif()
+endfunction()
+
+# Catch library for contra
+
+find_package(Catch2 QUIET)
+add_external_cmake_submodule(catch
+    TARGET make-catch
+    UNLESS Catch2_FOUND
+    CMAKE_ARGS
+    "-DCATCH_BUILD_TESTING=OFF"
+    "-DCATCH_BUILD_EXAMPLES=OFF"
+    "-DCATCH_INSTALL_DOCS=OFF"
+    "-DCATCH_INSTALL_HELPERS=OFF"
+)
+
+# Conduit library for contra and nesci
+# Note: Findconduit.cmake provided in toplevel cmake subdirectory.
+
+find_package(conduit QUIET)
+add_external_cmake_submodule(conduit
+    TARGET make-conduit
+    UNLESS conduit_FOUND
+    SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/conduit/src"
+    CMAKE_ARGS
+    "-DENABLE_TESTS=OFF"
+    "-DENABLE_DOCS=OFF"
+    "-DCMAKE_SKIP_RPATH=ON"
+)
+
+# ZeroMQ C++ binding for contra.
+
+find_package(cppzmq QUIET)
+add_external_cmake_submodule(cppzmq
+    TARGET make-cppzmq
+    UNLESS cppzmq_FOUND
+    CMAKE_ARGS
+    "-DENABLE_DRAFTS=OFF"
+    "-DCPPZMQ_BUILD_TESTS=OFF"
+)
+
+# Contra library
+
+#find_package(contra QUIET)
+find_package(contra)
+add_external_cmake_submodule(contra
+    TARGET make-contra
+    UNLESS contra_FOUND
+    DEPENDS make-cppzmq make-conduit make-catch
+    CMAKE_ARGS
+    "-DENABLE_DRAFTS=OFF"
+    "-DCPPZMQ_BUILD_TESTS=OFF"
+)
+
+# Nesci library
+
+find_package(nesci COMPONENTS layout producer)
+add_external_cmake_submodule(nesci
+    TARGET make-nesci
+    UNLESS nesci_FOUND
+    DEPENDS make-conduit make-catch
+)
+
+# Make aliases for contra and nesci for use by examples.
+
+if(contra_FOUND)
+    add_library(ext-contra ALIAS contra)
+    message(STATUS "*** DEBUG: made contra alias")
+else()
+    # Running make-contra should trigger a reconfigure.
+    add_library(ext-contra INTERFACE)
+    add_dependencies(ext-contra make-contra)
+endif()
+
+include("${reconfigure_tag}")
+if(nesci_FOUND)
+    add_library(ext-nesci ALIAS nesci_producer)
+    message(STATUS "*** DEBUG: made nesci alias")
+else()
+    # Running make-nesci should trigger a reconfigure.
+    add_library(ext-nesci INTERFACE)
+    add_dependencies(ext-nesci make-nesci)
+endif()
+
+

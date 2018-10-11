@@ -21,14 +21,14 @@
 #include <arbor/recipe.hpp>
 #include <arbor/version.hpp>
 
-#include <aux/ioutil.hpp>
-#include <aux/json_meter.hpp>
+#include <ancillary/ioutil.hpp>
+#include <ancillary/json_meter.hpp>
 
 #include "parameters.hpp"
 
 #ifdef ARB_MPI_ENABLED
 #include <mpi.h>
-#include <aux/with_mpi.hpp>
+#include <anc/with_mpi.hpp>
 #endif
 
 using arb::cell_gid_type;
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         bool root = true;
 
 #ifdef ARB_MPI_ENABLED
-        aux::with_mpi guard(argc, argv, false);
+        anc::with_mpi guard(argc, argv, false);
         auto context = arb::make_context(arb::proc_allocation(), MPI_COMM_WORLD);
         {
             int rank;
@@ -194,7 +194,7 @@ int main(int argc, char** argv) {
         arb::profile::profiler_initialize(context);
 #endif
 
-        std::cout << aux::mask_stream(root);
+        std::cout << anc::mask_stream(root);
 
         // Print a banner with information about hardware configuration
         std::cout << "gpu:      " << (has_gpu(context)? "yes": "no") << "\n";
