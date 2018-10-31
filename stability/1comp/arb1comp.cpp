@@ -50,7 +50,7 @@ struct pas1comp: recipe {
         mc_cell c;
 
         double r = 9e-6; // [m]
-        double area = r*r*4*pi*1e-12; // [m²]
+        double area = r*r*4*pi; // [m²]
         mechanism_desc pas("pas");
         pas["g"] = 1e-10/(p.rm*area); // [S/cm^2]
         pas["e"] = p.erev;
@@ -59,7 +59,7 @@ struct pas1comp: recipe {
         soma->cm = p.cm*1e-9/area;
         soma->add_mechanism(pas);
 
-        c.add_stimulus({0,0}, {0, FLT_MAX, p.iinj});
+        c.add_stimulus({0,0.5}, {0, FLT_MAX, p.iinj});
         return c;
     }
 
@@ -69,7 +69,7 @@ struct pas1comp: recipe {
 
     util::any get_global_properties(cell_kind) const override {
         mc_cell_global_properties props;
-        props.init_membrane_potential_mV = 77; //param_set_[0].erev; // pick first!
+        props.init_membrane_potential_mV = param_set_[0].erev; // pick first!
         return props;
     }
 
@@ -114,7 +114,7 @@ std::vector<pas1comp_result> run_pas1comp(pas1comp::param p, int nstep_min, int 
 
         sim.add_sampler(all_probes, explicit_schedule({(float)tau}), sample_once);
 
-
+/*
         auto dump = [](cell_member_type, probe_tag, std::size_t n, const sample_record* rec) {
             for (unsigned i = 0; i<n; ++i) {
                 auto ptr = util::any_cast<const double*>(rec[i].data);
@@ -123,7 +123,7 @@ std::vector<pas1comp_result> run_pas1comp(pas1comp::param p, int nstep_min, int 
             }
         };
         sim.add_sampler(all_probes, regular_schedule(dt), dump);
-
+*/
         sim.run(t_end, dt);
 
         if (t<0) {
@@ -142,11 +142,10 @@ std::vector<pas1comp_result> run_pas1comp(pas1comp::param p, int nstep_min, int 
 
 int main() {
     pas1comp::param p; // default
-    //auto results = run_pas1comp(p, 1, 100);
-    auto results = run_pas1comp(p, 100, 100);
+    auto results = run_pas1comp(p, 5, 100);
 
     std::cout << "t, v, dt, verr\n";
     for (auto& r: results) {
-   //     std::cout << r.t << ", " << r.v << ", " << r.dt << ", " << r.v_err << "\n";
+        std::cout << r.t << ", " << r.v << ", " << r.dt << ", " << r.v_err << "\n";
     }
 }
