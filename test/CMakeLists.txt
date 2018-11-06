@@ -28,3 +28,7 @@ add_subdirectory(unit-modcc)
 # Microbenchmarks.
 # Builds: one executable per microbenchmark under ubench/.
 add_subdirectory(ubench)
+
+# Numerical tests/demos.
+# Builds: rc-circuit (not built by default)
+add_subdirectory(numerical)
