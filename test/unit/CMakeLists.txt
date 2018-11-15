@@ -4,7 +4,7 @@ set(test_mechanisms
     celsius_test
 )
 
-include(${PROJECT_SOURCE_DIR}/mechanisms/BuildModules.cmake)
+include(BuildModules.cmake)
 
 set(external_modcc)
 if(ARB_WITH_EXTERNAL_MODCC)

@@ -296,9 +296,6 @@ add_subdirectory(test)
 # miniapp, brunel-minapp, event-gen 
 add_subdirectory(example)
 
-# stability stuff
-add_subdirectory(stability/1comp)
-
 # lmorpho:
 add_subdirectory(lmorpho)
 

@@ -1,7 +1,16 @@
 TITLE nax
+: Edited from naxn.mod in ModelDB model 43039; corresponding paper
+: is:
+:   Migliore et al. (2005), The role of distal dendritic gap
+:   junctions in synchronization of mitral cell axonal output.
+:   J. Comput. Neurosci. 2005 18(2): 151–161.
+: Original comments below.
+
 : Na current for axon. No slow inact.
 : M.Migliore Jul. 1997
 : added sh to account for higher threshold M.Migliore, Apr.2002
+
+
 
 NEURON {
     SUFFIX nax
@@ -90,5 +99,5 @@ PROCEDURE trates(vm,sh2,celsius) {
 
 FUNCTION trap0(v,th,a,q) {
     : trap0 = a * (v - th) / (1 - exp(-(v - th)/q))
-    trap0 = -a*q*exprelr((v-th)/q)
+    trap0 = a*q*exprelr(-(v-th)/q)
 }
