@@ -1,4 +1,4 @@
-include(BuildModules.cmake)
+include(BuildModules)
 
 # The list of library-provided mechanisms used to populate the default catalogue:
 set(mechanisms pas hh expsyn exp2syn test_kin1 test_kinlva test_ca nax kdrmt kamt)

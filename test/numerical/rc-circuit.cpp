@@ -79,10 +79,9 @@ struct run_param_set {
 
 struct run_rc_result {
     double dt;      // [ms]
-    double t_end;   // [ms]
-    double iinj;    // [nA]
-    double v;       // [mV]
-    double v_exact; // [mV]
+    std::vector<double> t;
+    std::vector<double> v;
+    std::vector<double> v_exact;
 };
 
 std::vector<run_rc_result> run_rc(run_param_set, rc_param_set);
@@ -186,13 +185,15 @@ struct pas1comp: recipe {
     // |              |
     // +-----(\)------+
     //       iinj
+    //
+    // iinj is either constant, equal to iinj0, or decaying,
+    // with iinj(t) = iinj0 * exp(-t/iinjtau).
 
-    explicit pas1comp(rc_param_set rc, std::vector<double> iinj):
-        rc_(std::move(rc)),
-        iinj_(std::move(iinj))
+    explicit pas1comp(rc_param_set rc):
+        rc_(std::move(rc))
     {}
 
-    cell_size_type num_cells() const override { return iinj_.size(); }
+    cell_size_type num_cells() const override { return 1; }
     cell_size_type num_targets(cell_gid_type) const override { return 0; }
     cell_size_type num_probes(cell_gid_type) const override { return 1; }
     cell_kind get_cell_kind(cell_gid_type) const override { return cell_kind::cable1d_neuron; }
@@ -210,14 +211,14 @@ struct pas1comp: recipe {
         soma->cm = rc_.cm*1e-9/area;
         soma->add_mechanism(pas);
 
-        if (iinjtau>0) {
+        if (rc_.iinjtau>0) {
             mechanism_desc decay_inj("decay_inj");
             decay_inj["iinj0"] = rc_.iinj0;
             decay_inj["tau"] = rc_.iinjtau;
             soma->add_mechanism(decay_inj);
         }
         else {
-            c.add_stimulus({0,0.5}, {0, FLT_MAX, (float)iinj_.at(gid)});
+            c.add_stimulus({0,0.5}, {0, FLT_MAX, (float)rc_.iinj0});
         }
         return c;
     }
@@ -249,16 +250,12 @@ private:
 
     static constexpr double pi = 3.141592653589793238462643383279502884;
     rc_param_set rc_;
-    std::vector<double> iinj_;
 };
 
 std::vector<run_rc_result> run_rc(run_param_set p, rc_param_set rc) {
     std::vector<run_rc_result> results;
     unsigned n_dt = p.nsteps;
     unsigned n_inj = p.ncurrents;
-
-    std::vector<double> iinj(n_inj);
-    std::vector<double> vinf(n_inj);
 
     std::vector<std::vector<double>> sample_t(n_dt);
     std::vector<std::vector<double>> sample_v(n_dt);
@@ -267,31 +264,53 @@ std::vector<run_rc_result> run_rc(run_param_set p, rc_param_set rc) {
 
     results.reserve(n_dt*n_inj);
 
-    auto sample = [&sample_t, &sample_v](cell_member_type m, probe_tag, std::size_t n, const sample_record* rec) {
-        for (std::size_t i = 0; i<n; ++i) {
-            auto vptr = util::any_cast<const double*>(rec[i].data);
-            if (!vptr) throw std::runtime_error("sampling error");
-
-            sample_t.at(m.gid).push_back(rec[i].time);
-            sample_v.at(m.gid).push_back(*ptr);
-        }
-    };
-
     auto context = make_context();
 
+    results.resize(n_rt);
     for (unsigned i = 0; i<n_dt; ++i) {
         double dt = p.dt.min;
         if (n_dt>1) dt *= std::pow(p.dt_max/p.dt_min, i/(n_dt-1.));
 
+        auto& result = results[i];
+        result.dt = dt;
+
+        auto sample = [&result](cell_member_type m, probe_tag, std::size_t n, const sample_record* rec) {
+            for (std::size_t i = 0; i<n; ++i) {
+                auto vptr = util::any_cast<const double*>(rec[i].data);
+                if (!vptr || m.gid!=0) throw std::runtime_error("sampling error");
+
+                result.t.push_back(rec[i].time);
+                result.v.push_back(*ptr);
+            }
+        };
+
+        pas1comp recipe(rc);
+        simulation sim(recipe, partition_load_balance(recipe, context), context);
+
+        sim.add_sampler(all_probes, regular_schedule(dt), sample);
+        sim.run(p.t_end, dt);
+
+        results[i].dt = dt;
+        results[
+    }
+
+    for (unsigned i = 0; i<n_dt; ++i) {
+        auto& r = results[i];
+        r.dt = 
+    double dt;      // [ms]
+    std::vector<double> t;
+    std::vector<double> v;
+    std::vector<double> v_exact;
+        r.
+    }
+
+
+//
 // work from here...
         pas1comp recipe(rc, iinj);
-        simulation sim(recipe, partition_load_balance(recipe, context), context);
 
         std::fill(sample_t.begin(), sample_t.end(), -1.f);
         std::fill(sample_v.begin(), sample_v.end(), 0.f);
-
-        sim.add_sampler(all_probes, explicit_schedule({(float)tau}), sample_once);
-        sim.run(t_end, dt);
 
         for (unsigned j = 0; j<n_inj; ++j) {
             if (sample_t[j]<0) throw std::runtime_error("sampler never triggered?!");

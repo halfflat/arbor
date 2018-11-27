@@ -9,7 +9,7 @@ endif()
 set(mech_dir ${CMAKE_CURRENT_BINARY_DIR}/mechanisms)
 
 build_modules(
-    ${numerical_mechanisms}
+    ${numerical_mechs}
     SOURCE_DIR mod
     DEST_DIR "${mech_dir}"
     ${external_modcc}
@@ -19,7 +19,7 @@ build_modules(
 )
 
 set(numerical_mech_sources)
-foreach(mod ${numerical_mechs})
+foreach(mech ${numerical_mechs})
     list(APPEND numerical_mech_sources ${mech_dir}/${mech}_cpu.cpp)
 endforeach()
 

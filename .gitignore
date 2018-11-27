@@ -52,7 +52,6 @@
 CMakeFiles
 CMakeCache.txt
 cmake_install.cmake
-Makefile
 
 # mechanisms generated from .mod files
 mechanisms/multicore/*.hpp

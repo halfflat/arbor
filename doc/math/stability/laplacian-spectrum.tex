@@ -1,0 +1,125 @@
+\documentclass[parskip=half]{scrartcl}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[citestyle=authoryear-icomp,bibstyle=authoryear]{biblatex}
+\usepackage[style=british]{csquotes}
+\usepackage{fontspec}
+
+\setmainfont[Numbers=Lowercase]{TeX Gyre Pagella}
+\newfontfamily\dispfamily{TeX Gyre Pagella}
+\addtokomafont{disposition}{\dispfamily}
+
+\MakeAutoQuote{«}{»}
+
+\addbibresource{stability.bib}
+
+\title{Eigenvectors for the discrete cable Laplacian}
+\author{Sam Yates}
+\date{October 20, 2016}
+
+\begin{document}
+
+\maketitle
+
+\section{Background}
+
+When the cable equation is uniformly discretized with vertex-centred FVM and
+zero-flux boundary conditions, the Laplacian operator takes the form
+\[
+    h\cdot L_{i, j} =
+    \begin{cases}
+	1 & \text{if $i=j=1$ or $i=j=n$,}\\
+	2 & \text{if $1<i=j<n$,}\\
+	-1 & \text{if $|i-j|=1$,}\\
+	0 & \text{otherwise,}
+    \end{cases}
+\]
+where there are $n$ vertices on the cable of length $L$, and the spatial
+step size $h=L/(n-1)$.
+
+What are the eigenvalues and eigenvectors of $L$?
+
+\section{Solution}
+
+Let the eigenvalues be $\lambda_j$ for $j=1,\dots,n$, and $e^{(j)}$
+be a non-zero eigenvector in the corresponding eigenspace.
+
+From $L e^{(j)}=\lambda_j e^{(j)}$ we have the relations on the components
+of the eigenvectors as follows:
+\begin{align}
+    \label{eq:evec1}
+    e^{(j)}_2 &= (1-\lambda_j) e^{(j)}_1,\\
+    \label{eq:evec2}
+    e^{(j)}_{k+2} &= (2-\lambda_j) e^{(j)}_{k+1} - e^{(j)}_k \quad\text{for $k=0,\dots,n-2$},\\
+    \label{eq:evec3}
+    e^{(j)}_{n-1} &= (1-\lambda_j) e^{(j)}_n.
+\end{align}
+
+Let $E_k(x)$ be the $k$-degree polynomial in $x$ such that
+$e^{(j)}_k = E_{k-1}(1-\lambda_j/2) e^{(j)}_1$, so that the recurrence relation given by
+(\ref{eq:evec1}) and (\ref{eq:evec2}) becomes
+\begin{align}
+    E_0(x) &= 1,\\
+    E_1(x) &= 2x-1,\\
+    \label{eq:erec}
+    E_{k+2}(x) &= 2x E_{k+1}(x) - E_k(x).
+\end{align}
+
+The recurrence relation is the same as that for the Chebyshev polynomials of
+the second kind $U_k(x)$, which satisfy
+\begin{align*}
+    U_0(x) &= 1,\\
+    U_1(x) &= 2x,\\
+    U_{k+2}(x) &= 2x U_{k+1}(x) - U_k(x),
+\end{align*}
+and which have roots
+\[
+    U_{n-1}(x) = 0 \implies x = \cos \frac{j\pi}{n}, \quad\text{j=1,\dots,n-1}.
+\]
+
+$E_k(x)$ then can be expressed as a linear combination (in the ring
+of polynomials) of the $U_k(x)$. Allowing $U_{-1}(x)=0$,
+\begin{equation}
+    \label{eq:easu}
+    E_k(x) = U_k(x)-U_{k-1}(x).
+\end{equation}
+(This is in fact a special case of \cite[Theorem 4.1]{aharonov2005}.)
+
+Solutions $\lambda_j$ to (\ref{eq:evec3}) then are of the form $2-2x$
+for $x$ satisfying
+\[
+    (2x-1)E_{n-1}(x)=E_{n-2}(x).
+\]
+Applying (\ref{eq:easu}) and the recurrence relationship gives
+\[
+    U_{n-1}(x)(2x-2) = 0,
+\]
+with solutions $x_j = \cos \frac{j\pi}{n}$ for $j=1,\dots,n-1$ and
+$x_n = 0$, giving the eigenvalues
+\[
+    \lambda_j = 2 - 2 \cos \frac{j\pi}{n}, \quad j=1,\dots, n.
+\]
+
+The $U_k$ satisfy the trigonometric identity
+\[
+    U_k(\cos \alpha) = \frac{\sin (k+1)\alpha}{\sin \alpha},
+\]
+so
+\[
+    E_{k-1}(1-\frac{\lambda_j}{2})
+    = \frac{\sin \frac{jk\pi}{n} - \sin \frac{j(k-1)\pi}{n}}{\sin \frac{j\pi}{n}}.
+\]
+Applying the sum-to-product trigonometric identity then gives
+\[
+    \cos \frac{j\pi}{2n} E_{k-1}(1-\frac{\lambda_j}{2}) =
+    \cos \frac{j\pi}{n}(k-\frac{1}{2}).
+\]
+Without loss of generality, we can take the first element of the
+$j$th eigenvector $e^{(j)}_1$ to be $\cos j\pi/2n$, so that
+\[
+    e^{(j)}_k = \cos \frac{j\pi}{n}(k-\frac{1}{2}),\quad\text{for $j,k=1,\dots,n$}.
+\]
+
+\printbibliography
+\end{document}
