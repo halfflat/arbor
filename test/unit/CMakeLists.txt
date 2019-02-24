@@ -70,6 +70,7 @@ set(unit_sources
     test_fvm_layout.cpp
     test_fvm_lowered.cpp
     test_glob_basic.cpp
+    test_group_by.cpp
     test_mc_cell_group.cpp
     test_lexcmp.cpp
     test_lif_cell_group.cpp
