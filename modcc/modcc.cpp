@@ -4,7 +4,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include <tclap/CmdLine.h>
+#include <sup/tinyopt.hpp>
 
 #include "printer/cprinter.hpp"
 #include "printer/cudaprinter.hpp"
@@ -113,6 +113,9 @@ std::ostream& operator<<(std::ostream& out, const printer_options& popt) {
         table_prefix{"simd"} << popt.simd << line_end;
 }
 
+// Option parsing and handling.
+
+
 // Constraints for TCLAP arguments that are names for enumertion values.
 struct MapConstraint: private std::vector<std::string>, public TCLAP::ValuesConstraint<std::string> {
     template <typename Map>
@@ -158,6 +161,40 @@ struct SimdAbiConstraint: public TCLAP::Constraint<std::string> {
         }
     }
 };
+
+const char* usage_long =
+"[OPTION]... MODFILE\n"
+"Transpile mechanism described in MODFILE for an Arbor back-end kernel.\n"
+"\n"
+"Options:\n"
+"  -m, --module MODULE   override module name\n"
+"  -N, --namspace NS     namespace for generated C++ code\n"
+"  -A, --analyse         enable analysis mode\n"
+"  -P, --profile         including profiling code in generated kernels\n"
+"  -s, --simd            generate code with explicit SIMD vectorization\n"
+"  -S, --simd-abi ABI    override SIMD ABI to use for vectorization\n"
+"  -t, --target TARGET   generate kernel for back-end TARGET (gpu or cpu)\n"
+"  -o, --output PREFIX   prefix output source files with PREFIX\n"
+"\n"
+"  --version             display version information and exit\n"
+"  -h, --help            display detailed help information and exit\n"
+
+"Modcc generates Arbor mechanism kernels in C++ and/or CUDA from an NMODL\n"
+"description in MODFILE. By default, only the mechanism information data\n"
+"is generated; kernels for Arbor back-ends will be generated according to\n"
+"the given -t/--target options."
+"\n"
+"By default, generated kernels will not employ any explicit vectorization.\n"
+"The -s/--simd option will generate SIMD code using the Arbor arb::simd\n"
+"library, targetting the simd_abi::native ABI which will endeavour to use\n"
+"the 'best' SIMD representation available at kernel compile time. The ABI\n"
+"can be set explicitly with -S/--simd-abi. An ABI is specified by an ABI\n"
+"name in the simd_abi namespace (e.g. avx2 or default_abi) followed\n"
+"optionally by a suffix /N specifying the vector width N.\n";
+
+const char* usage_short =
+"[-h|--help] [OPTION]... MODFILE\n";
+
 
 int main(int argc, char **argv) {
     Options opt;
