@@ -2,10 +2,11 @@
 
 #include <sstream>
 
+#include "error.hpp"
 #include "scope.hpp"
 #include "visitor.hpp"
 
-expression_ptr inline_function_call(Expression* e);
+expression_ptr inline_function_call(Expression* e, error_stack* record = nullptr);
 
 class VariableReplacer : public Visitor {
 

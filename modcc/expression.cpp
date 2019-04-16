@@ -566,6 +566,7 @@ void NetReceiveExpression::semantic(scope_type::symbol_map &global_symbols) {
 
     // create the scope for this procedure
     scope_ = std::make_shared<scope_type>(global_symbols);
+    scope_->in_api_context(true);
 
     // add the argumemts to the list of local variables
     for(auto& a : args_) {

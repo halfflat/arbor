@@ -155,8 +155,10 @@ void fvm_lowered_cell_impl<Backend>::reset() {
     state_->reset(initial_voltage_, temperature_);
     set_tmin(0);
 
+    state_->zero_currents();
     for (auto& m: mechanisms_) {
         m->initialize();
+        m->nrn_current();
     }
 
     update_ion_state();
@@ -205,16 +207,9 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
         state_->deliverable_events.mark_until_after(state_->time);
         PL();
 
-        PE(advance_integrate_current_zero);
-        state_->zero_currents();
-        PL();
         for (auto& m: mechanisms_) {
-            m->deliver_events();
-            m->nrn_current();
+            m->deliver_events(); // Updates currents as required.
         }
-
-        // Add current contribution from gap_junctions
-        state_->add_gj_current();
 
         PE(advance_integrate_events);
         state_->deliverable_events.drop_marked_events();
@@ -262,6 +257,18 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
         threshold_watcher_.test();
         memory::copy(state_->time_to, state_->time);
         PL();
+
+        // Compute current/conductances from mechanisms and
+        // gap junctions.
+
+        PE(advance_integrate_current_zero);
+        state_->zero_currents();
+        PL();
+
+        for (auto& m: mechanisms_) {
+            m->nrn_current();
+        }
+        state_->add_gj_current();
 
         // Check for non-physical solutions:
 

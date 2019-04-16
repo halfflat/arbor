@@ -4,7 +4,7 @@
 #include "functioninliner.hpp"
 #include "errorvisitor.hpp"
 
-expression_ptr inline_function_call(Expression* e)
+expression_ptr inline_function_call(Expression* e, error_stack* record)
 {
     if(auto f=e->is_function_call()) {
         auto func = f->function();
@@ -59,16 +59,10 @@ expression_ptr inline_function_call(Expression* e)
         }
         new_e->semantic(e->scope());
 
-        ErrorVisitor v("");
-        new_e->accept(&v);
 #ifdef LOGGING
         std::cout << "inline_function_call result " << new_e->to_string() << "\n\n";
 #endif
-        if(v.num_errors()) {
-            throw compiler_exception("something went wrong with inlined function call ",
-                                     e->location());
-        }
-
+        if (collect_errors(new_e, record, false)) return {};
         return new_e;
     }
 

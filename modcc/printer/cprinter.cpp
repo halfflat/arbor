@@ -27,8 +27,8 @@ constexpr bool with_profiling() {
 void emit_procedure_proto(std::ostream&, ProcedureExpression*, const std::string& qualified = "");
 void emit_simd_procedure_proto(std::ostream&, ProcedureExpression*, const std::string& qualified = "");
 
-void emit_api_body(std::ostream&, APIMethod*);
-void emit_simd_api_body(std::ostream&, APIMethod*, moduleKind);
+void emit_api_body(std::ostream&, ProcedureExpression*, bool single_index = false);
+void emit_simd_api_body(std::ostream&, ProcedureExpression*, moduleKind);
 
 void emit_index_initialize(std::ostream& out, const std::unordered_set<std::string>& indices,
                            simd_expr_constraint constraint);
@@ -324,21 +324,24 @@ std::string emit_cpp_source(const Module& module_, const printer_options& opt) {
 
     // Nrn methods:
 
-    net_receive && out <<
-        "void " << class_name << "::deliver_events(deliverable_event_stream::state events) {\n" << indent <<
-        "auto ncell = events.n_streams();\n"
-        "for (size_type c = 0; c<ncell; ++c) {\n" << indent <<
-        "auto begin = events.begin_marked(c);\n"
-        "auto end = events.end_marked(c);\n"
-        "for (auto p = begin; p<end; ++p) {\n" << indent <<
-        "if (p->mech_id==mechanism_id_) net_receive(p->mech_index, p->weight);\n" << popindent <<
-        "}\n" << popindent <<
-        "}\n" << popindent <<
-        "}\n"
-        "\n"
-        "void " << class_name << "::net_receive(int i_, value_type weight) {\n" << indent <<
-        cprint(net_receive->body()) << popindent <<
-        "}\n\n";
+    if (net_receive) {
+        out <<
+            "void " << class_name << "::deliver_events(deliverable_event_stream::state events) {\n" << indent <<
+            "auto ncell = events.n_streams();\n"
+            "for (size_type c = 0; c<ncell; ++c) {\n" << indent <<
+            "auto begin = events.begin_marked(c);\n"
+            "auto end = events.end_marked(c);\n"
+            "for (auto p = begin; p<end; ++p) {\n" << indent <<
+            "if (p->mech_id==mechanism_id_) net_receive(p->mech_index, p->weight);\n" << popindent <<
+            "}\n" << popindent <<
+            "}\n" << popindent <<
+            "}\n"
+            "\n";
+
+        out << "void " << class_name << "::net_receive(int i_, value_type weight) {\n" << indent;
+        emit_api_body(out, net_receive, true);
+        out << popindent << "}\n\n";
+    }
 
     auto emit_body = [&](APIMethod *p) {
         if (with_simd) {
@@ -476,14 +479,16 @@ void emit_state_update(std::ostream& out, Symbol* from, IndexedVariable* externa
     out << cprint(external) << op << from->name() << ";\n";
 }
 
-void emit_api_body(std::ostream& out, APIMethod* method) {
+void emit_api_body(std::ostream& out, ProcedureExpression* method, bool single_index) {
     auto body = method->body();
     auto indexed_vars = indexed_locals(method->scope());
 
     if (!body->statements().empty()) {
-        out <<
-            "int n_ = width_;\n"
-            "for (int i_ = 0; i_ < n_; ++i_) {\n" << indent;
+        if (!single_index) {
+            out <<
+                "int n_ = width_;\n"
+                "for (int i_ = 0; i_ < n_; ++i_) {\n" << indent;
+        }
 
         for (auto& sym: indexed_vars) {
             emit_state_read(out, sym);
@@ -493,7 +498,10 @@ void emit_api_body(std::ostream& out, APIMethod* method) {
         for (auto& sym: indexed_vars) {
             emit_state_update(out, sym, sym->external_variable());
         }
-        out << popindent << "}\n";
+
+        if (!single_index) {
+            out << popindent << "}\n";
+        }
     }
 }
 
@@ -707,7 +715,7 @@ void emit_for_loop_per_constraint(std::ostream& out, BlockExpression* body,
     out << popindent << "}\n";
 }
 
-void emit_simd_api_body(std::ostream& out, APIMethod* method, moduleKind module_kind) {
+void emit_simd_api_body(std::ostream& out, ProcedureExpression* method, moduleKind module_kind) {
     auto body = method->body();
     auto indexed_vars = indexed_locals(method->scope());
 

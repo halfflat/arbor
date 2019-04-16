@@ -6,8 +6,8 @@
 
 class ErrorVisitor : public Visitor {
 public:
-    ErrorVisitor(std::string const& m)
-        : module_name_(m)
+    ErrorVisitor(error_stack* record, bool quiet = true)
+        : record_(record), quiet_(quiet)
     {}
 
     void visit(Expression *e)           override;
@@ -21,31 +21,22 @@ public:
     void visit(InitialBlock *e)         override;
     void visit(IfExpression *e)         override;
 
-    int num_errors()   {return num_errors_;}
-    int num_warnings() {return num_warnings_;}
-private:
-    template <typename ExpressionType>
-    void print_error(ExpressionType *e) {
-        if(e->has_error()) {
-            auto header = red("error: ")
-                        + white(pprintf("% % ", module_name_, e->location()));
-            std::cout << header << "\n  "
-                      << e->error_message()
-                      << std::endl;
-            num_errors_++;
-        }
-        if(e->has_warning()) {
-            auto header = purple("warning: ")
-                        + white(pprintf("% % ", module_name_, e->location()));
-            std::cout << header << "\n  "
-                      << e->warning_message()
-                      << std::endl;
-            num_warnings_++;
-        }
-    }
+    operator bool() const { return has_error_; }
 
-    std::string module_name_;
-    int num_errors_ = 0;
-    int num_warnings_ = 0;
+private:
+    void push_error(Expression*);
+
+    error_stack* record_ = nullptr;
+    bool quiet_ = true;
+    bool has_error_ = false;
 };
 
+inline bool collect_errors(Expression* e, error_stack* record = nullptr, bool quiet = true) {
+    ErrorVisitor v(record, quiet);
+    v.visit(e);
+    return v;
+}
+
+inline bool collect_errors(expression_ptr& e, error_stack* record = nullptr, bool quiet = true) {
+    return collect_errors(e.get(), record, quiet);
+}

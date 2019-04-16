@@ -130,16 +130,20 @@ private:
     bool generate_state_api();
     void add_variables_to_symbols();
 
-    bool has_symbol(const std::string& name) {
-        return symbols_.find(name) != symbols_.end();
+    Symbol* has_symbol(const char* n) {
+        return has_symbol(std::string(n));
     }
 
-    bool has_symbol(const std::string& name, symbolKind kind) {
-        auto s = symbols_.find(name);
-        return s == symbols_.end() ? false : s->second->kind() == kind;
+    Symbol* has_symbol(const std::string& name) {
+        auto siter = symbols_.find(name);
+        return siter != symbols_.end()? siter->second.get(): nullptr;
+    }
+
+    Symbol* has_symbol(const std::string& name, symbolKind kind) {
+        auto s = has_symbol(name);
+        return s && s->kind() == kind? s: nullptr;
     }
 
     // Perform semantic analysis on functions and procedures.
-    // Returns the number of errors that were encountered.
-    int semantic_func_proc();
+    void semantic_func_proc();
 };

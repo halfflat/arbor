@@ -7,6 +7,7 @@
 #include <string>
 #include <unordered_set>
 
+#include "astmanip.hpp"
 #include "errorvisitor.hpp"
 #include "functionexpander.hpp"
 #include "functioninliner.hpp"
@@ -112,6 +113,107 @@ public:
     }
 };
 
+// Bracket a given expression with two copies of a current evaluation,
+// in order to compute and apply the change in current that results
+// from the action of the expression.
+//
+// Presuming the current computation doesn't go off and mutilate
+// state, this should be fine. Another motivation for a functional
+// representation!
+
+class NrnCurrentDeltaRewriter: public BlockRewriterBase {
+public:
+    using BlockRewriterBase::visit;
+
+    NrnCurrentDeltaRewriter(Expression* e) {
+        inner_expression_ = e->clone();
+    }
+
+    virtual void finalize() override {
+        if (has_current_update_) {
+            std::map<std::string, std::string> saved_map; // Map current var to name of copy.
+
+            std::vector<expression_ptr> reprise; // Make a copy to append.
+            for (auto& e: statements_) reprise.push_back(e->clone());
+
+            // Make a copy of each ionic current variable, resetting variables
+            // to zero.
+
+            for (auto& v: ion_current_vars_) {
+                auto v_id = id(v);
+                auto lass = make_unique_local_assign(block_scope_, v_id, "saved_"+v+"_");
+                saved_map.insert({v, lass.id->is_identifier()->name()});
+                statements_.push_front(std::move(lass.local_decl));
+                statements_.push_back(std::move(lass.assignment));
+            }
+
+            for (auto& v: ion_current_vars_) {
+                statements_.push_back(make_expression<AssignmentExpression>(loc_,
+                    id(v),
+                    make_expression<NumberExpression>(loc_, 0.0)));
+            }
+
+            // Add original expression.
+            statements_.push_back(inner_expression_->clone());
+
+            // Recompute current contributions.
+            for (auto& e: reprise) statements_.push_back(std::move(e));
+
+            // Subtract saved current values and scale by weight;
+            // accumulate in current_.
+
+            for (auto& v: ion_current_vars_) {
+                statements_.push_back(make_expression<AssignmentExpression>(loc_,
+                    id(v),
+                    make_expression<MulBinaryExpression>(loc_,
+                        id("weight_"),
+                        make_expression<SubBinaryExpression>(loc_,
+                            id(v), id(saved_map[v])))));
+            }
+
+            statements_.push_back(make_expression<AssignmentExpression>(loc_,
+                    id("current_"),
+                    make_expression<NumberExpression>(loc_, 0.0)));
+
+            for (auto& v: ion_current_vars_) {
+                statements_.push_back(make_expression<AssignmentExpression>(loc_,
+                    id("current_"),
+                    make_expression<AddBinaryExpression>(loc_,
+                        id("current_"),
+                        id(v))));
+            }
+        }
+    }
+
+    virtual void visit(SolveExpression *e) override {}
+    virtual void visit(ConductanceExpression *e) override {}
+
+    virtual void visit(AssignmentExpression *e) override {
+        statements_.push_back(e->clone());
+
+        auto sym = e->lhs()->is_identifier()->symbol();
+        if (!sym) return;
+
+        auto var = sym->is_local_variable();
+        if (!var) return;
+
+        ionKind ion = var->ion_channel();
+        if (ion==ionKind::none) return;
+
+        has_current_update_ = true;
+        ion_current_vars_.insert(sym->name());
+    }
+
+private:
+    expression_ptr id(const std::string& name) {
+        return make_expression<IdentifierExpression>(loc_, name);
+    }
+
+    bool has_current_update_ = false;
+    std::set<std::string> ion_current_vars_;
+    expression_ptr inner_expression_;
+};
+
 std::string Module::error_string() const {
     std::string str;
     for (const error_entry& entry: errors()) {
@@ -190,10 +292,8 @@ bool Module::semantic() {
     if(!move_symbols(callables_))  return false;
 
     // perform semantic analysis and inlining on function and procedure bodies
-    if(auto errors = semantic_func_proc()) {
-        error("There were "+std::to_string(errors)+" errors in the semantic analysis");
-        return false;
-    }
+    semantic_func_proc();
+    if (has_error()) return false;
 
     // All API methods are generated from statements in one of the special procedures
     // defined in NMODL, e.g. the nrn_init() API call is based on the INITIAL block.
@@ -436,29 +536,36 @@ bool Module::semantic() {
         return false;
     }
 
-    if (has_symbol("net_receive", symbolKind::procedure)) {
-        auto net_rec_api = make_empty_api_method("net_rec_api", "net_receive");
-        if (net_rec_api.second) {
-            for (auto &s: net_rec_api.second->body()->statements()) {
-                if (s->is_assignment()) {
-                    for (const auto &id: state_vars) {
-                        auto coef = symbolic_pdiff(s->is_assignment()->rhs(), id);
-                        if(coef->is_number()) {
-                            if (!s->is_assignment()->lhs()->is_identifier()) {
-                                error(pprintf("Left hand side of assignment is not an identifier"));
-                                return false;
-                            }
-                            linear &= s->is_assignment()->lhs()->is_identifier()->name() == id ?
-                                      coef->is_number()->value() == 1 :
-                                      coef->is_number()->value() == 0;
+    // Check net_receive for linearity and insert current delta update.
+    if (auto net_receive = has_symbol("net_receive", symbolKind::procedure)) {
+
+        for (auto &s: net_receive->is_procedure()->body()->statements()) {
+            if (s->is_assignment()) {
+                for (const auto &id: state_vars) {
+                    auto coef = symbolic_pdiff(s->is_assignment()->rhs(), id);
+                    if(coef->is_number()) {
+                        if (!s->is_assignment()->lhs()->is_identifier()) {
+                            error(pprintf("Left hand side of assignment is not an identifier"));
+                            return false;
                         }
-                        else {
-                            linear = false;
-                        }
+                        linear &= s->is_assignment()->lhs()->is_identifier()->name() == id ?
+                                  coef->is_number()->value() == 1 :
+                                  coef->is_number()->value() == 0;
+                    }
+                    else {
+                        linear = false;
                     }
                 }
             }
         }
+
+        NrnCurrentDeltaRewriter with_delta(net_receive->is_procedure()->body());
+        breakpoint->accept(&with_delta);
+
+        net_receive->is_procedure()->body(with_delta.as_block());
+        net_receive->semantic(symbols_);
+
+        collect_errors(net_receive->is_procedure()->body(), this, false);
     }
     linear_ = linear;
 
@@ -662,7 +769,7 @@ void Module::add_variables_to_symbols() {
     }
 }
 
-int Module::semantic_func_proc() {
+void Module::semantic_func_proc() {
     ////////////////////////////////////////////////////////////////////////////
     // now iterate over the functions and procedures and perform semantic
     // analysis on each. This includes
@@ -675,7 +782,6 @@ int Module::semantic_func_proc() {
     std::cout << cyan("        Function Inlining\n");
     std::cout << white("===================================\n");
 #endif
-    int errors = 0;
     for(auto& e : symbols_) {
         auto& s = e.second;
 
@@ -690,91 +796,86 @@ int Module::semantic_func_proc() {
             // first perform semantic analysis
             s->semantic(symbols_);
 
-            // then use an error visitor to print out all the semantic errors
-            ErrorVisitor v(source_name());
-            s->accept(&v);
-            errors += v.num_errors();
+            // if any semantic pass errors, log them and return.
+            if (collect_errors(s.get(), this, false)) return;
 
             // inline function calls
             // this requires that the symbol table has already been built
-            if(v.num_errors()==0) {
-                auto &b = s->kind()==symbolKind::function ?
-                    s->is_function()->body()->statements() :
-                    s->is_procedure()->body()->statements();
+            auto &b = s->kind()==symbolKind::function ?
+                s->is_function()->body()->statements() :
+                s->is_procedure()->body()->statements();
 
-                // lower function call sites so that all function calls are of
-                // the form : variable = call(<args>)
-                // e.g.
-                //      a = 2 + foo(2+x, y, 1)
-                // becomes
-                //      ll0_ = foo(2+x, y, 1)
-                //      a = 2 + ll0_
-                for(auto e=b.begin(); e!=b.end(); ++e) {
-                    b.splice(e, lower_function_calls((*e).get()));
-                }
+            // lower function call sites so that all function calls are of
+            // the form : variable = call(<args>)
+            // e.g.
+            //      a = 2 + foo(2+x, y, 1)
+            // becomes
+            //      ll0_ = foo(2+x, y, 1)
+            //      a = 2 + ll0_
+            for(auto e=b.begin(); e!=b.end(); ++e) {
+                b.splice(e, lower_function_calls((*e).get()));
+            }
 #ifdef LOGGING
-                std::cout << "body after call site lowering\n";
-                for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
-                std::cout << green("\n-argument lowering-\n\n");
+            std::cout << "body after call site lowering\n";
+            for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
+            std::cout << green("\n-argument lowering-\n\n");
 #endif
 
-                // lower function arguments that are not identifiers or literals
-                // e.g.
-                //      ll0_ = foo(2+x, y, 1)
-                //      a = 2 + ll0_
-                // becomes
-                //      ll1_ = 2+x
-                //      ll0_ = foo(ll1_, y, 1)
-                //      a = 2 + ll0_
-                for(auto e=b.begin(); e!=b.end(); ++e) {
-                    if(auto be = (*e)->is_binary()) {
-                        // only apply to assignment expressions where rhs is a
-                        // function call because the function call lowering step
-                        // above ensures that all function calls are of this form
-                        if(auto rhs = be->rhs()->is_function_call()) {
-                            b.splice(e, lower_function_arguments(rhs->args()));
-                        }
+            // lower function arguments that are not identifiers or literals
+            // e.g.
+            //      ll0_ = foo(2+x, y, 1)
+            //      a = 2 + ll0_
+            // becomes
+            //      ll1_ = 2+x
+            //      ll0_ = foo(ll1_, y, 1)
+            //      a = 2 + ll0_
+            for(auto e=b.begin(); e!=b.end(); ++e) {
+                if(auto be = (*e)->is_binary()) {
+                    // only apply to assignment expressions where rhs is a
+                    // function call because the function call lowering step
+                    // above ensures that all function calls are of this form
+                    if(auto rhs = be->rhs()->is_function_call()) {
+                        b.splice(e, lower_function_arguments(rhs->args()));
                     }
                 }
+            }
 
 #ifdef LOGGING
-                std::cout << "body after argument lowering\n";
-                for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
-                std::cout << green("\n-inlining-\n\n");
+            std::cout << "body after argument lowering\n";
+            for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
+            std::cout << green("\n-inlining-\n\n");
 #endif
 
-                // Do the inlining, which currently only works for functions
-                // that have a single statement in their body
-                // e.g. if the function foo in the examples above is defined as follows
-                //
-                //  function foo(a, b, c) {
-                //      foo = a*(b + c)
-                //  }
-                //
-                // the full inlined example is
-                //      ll1_ = 2+x
-                //      ll0_ = ll1_*(y + 1)
-                //      a = 2 + ll0_
-                for(auto e=b.begin(); e!=b.end(); ++e) {
-                    if(auto ass = (*e)->is_assignment()) {
-                        if(ass->rhs()->is_function_call()) {
-                            ass->replace_rhs(inline_function_call(ass->rhs()));
-                        }
+            // Do the inlining, which currently only works for functions
+            // that have a single statement in their body
+            // e.g. if the function foo in the examples above is defined as follows
+            //
+            //  function foo(a, b, c) {
+            //      foo = a*(b + c)
+            //  }
+            //
+            // the full inlined example is
+            //      ll1_ = 2+x
+            //      ll0_ = ll1_*(y + 1)
+            //      a = 2 + ll0_
+            for(auto e=b.begin(); e!=b.end(); ++e) {
+                if(auto ass = (*e)->is_assignment()) {
+                    if(ass->rhs()->is_function_call()) {
+                        ass->replace_rhs(inline_function_call(ass->rhs(), this));
                     }
                 }
+            }
 
 #ifdef LOGGING
-                std::cout << "body after inlining\n";
-                for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
+            std::cout << "body after inlining\n";
+            for(auto& l : b) std::cout << "  " << l->to_string() << " @ " << l->location() << "\n";
 #endif
-                // Finally, run a constant simplification pass.
-                if (auto proc = s->is_procedure()) {
-                    proc->body(constant_simplify(proc->body()));
-                    s->semantic(symbols_);
-                }
+            // Finally, run a constant simplification pass.
+            if (auto proc = s->is_procedure()) {
+                proc->body(constant_simplify(proc->body()));
+                s->semantic(symbols_);
             }
         }
     }
-    return errors;
 }
 
