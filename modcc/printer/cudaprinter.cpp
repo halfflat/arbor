@@ -14,12 +14,16 @@ using io::indent;
 using io::popindent;
 using io::quote;
 
+enum class accumKind {
+    none = 0, atomic = 1, reduce = 2
+};
+
 void emit_common_defs(std::ostream&, const Module& module_);
-void emit_api_body_cu(std::ostream& out, APIMethod* method, bool is_point_proc);
+void emit_api_body_cu(std::ostream& out, ProcedureExpression* method, bool is_point_proc, bool single_index = false);
 void emit_procedure_body_cu(std::ostream& out, ProcedureExpression* proc);
 void emit_state_read_cu(std::ostream& out, LocalVariable* local);
 void emit_state_update_cu(std::ostream& out, Symbol* from,
-                          IndexedVariable* external, bool is_point_proc);
+                          IndexedVariable* external, accumKind accum);
 const char* index_id(Symbol *s);
 
 struct cuprint {
@@ -305,9 +309,11 @@ std::string emit_cuda_cu_source(const Module& module_, const printer_options& op
             << "for (auto p = begin; p<end; ++p) {\n" << indent
             << "if (p->mech_id==mech_id_) {\n" << indent
             << "auto tid_ = p->mech_index;\n"
-            << "auto weight = p->weight;\n"
-            << cuprint(net_receive->body())
-            << popindent << "}\n"
+            << "auto weight = p->weight;\n";
+
+        emit_api_body_cu(out, net_receive, true, true);
+
+        out << popindent << "}\n"
             << popindent << "}\n"
             << popindent << "}\n"
             << popindent << "}\n";
@@ -380,7 +386,7 @@ static std::string index_i_name(const std::string& index_var) {
     return index_var+"i_";
 }
 
-void emit_api_body_cu(std::ostream& out, APIMethod* e, bool is_point_proc) {
+void emit_api_body_cu(std::ostream& out, ProcedureExpression* e, bool is_point_proc, bool single_index) {
     auto body = e->body();
     auto indexed_vars = indexed_locals(e->scope());
 
@@ -392,9 +398,16 @@ void emit_api_body_cu(std::ostream& out, APIMethod* e, bool is_point_proc) {
         }
     }
 
+    accumKind accum =
+        single_index? accumKind::atomic:
+        is_point_proc? accumKind::reduce:
+            accumKind::none;
+
     if (!body->statements().empty()) {
-        out << "int tid_ = threadIdx.x + blockDim.x*blockIdx.x;\n";
-        out << "if (tid_<n_) {\n" << indent;
+        if (!single_index) {
+            out << "int tid_ = threadIdx.x + blockDim.x*blockIdx.x;\n";
+            out << "if (tid_<n_) {\n" << indent;
+        }
 
         for (auto& index: indices) {
             out << "auto " << index_i_name(index)
@@ -408,9 +421,12 @@ void emit_api_body_cu(std::ostream& out, APIMethod* e, bool is_point_proc) {
         out << cuprint(body);
 
         for (auto& sym: indexed_vars) {
-            emit_state_update_cu(out, sym, sym->external_variable(), is_point_proc);
+            emit_state_update_cu(out, sym, sym->external_variable(), accum);
         }
-        out << popindent << "}\n";
+
+        if (!single_index) {
+            out << popindent << "}\n";
+        }
     }
 }
 
@@ -430,7 +446,7 @@ void emit_state_read_cu(std::ostream& out, LocalVariable* local) {
 }
 
 void emit_state_update_cu(std::ostream& out, Symbol* from,
-                          IndexedVariable* external, bool is_point_proc)
+                          IndexedVariable* external, accumKind accum)
 {
     if (!external->is_write()) return;
 
@@ -441,14 +457,21 @@ void emit_state_update_cu(std::ostream& out, Symbol* from,
         throw compiler_exception("Cannot assign to global scalar: "+external->to_string());
     }
 
-    if (is_point_proc) {
+    switch (accum) {
+    case accumKind::none:
+        out << cuprint(external) << (is_minus? " -= ": " += ") << from->name() << ";\n";
+        break;
+    case accumKind::reduce:
         out << "arb::gpu::reduce_by_key(";
         is_minus && out << "-";
         out << from->name()
             << ", params_." << d.data_var << ", " << index_i_name(d.index_var) << ");\n";
-    }
-    else {
-        out << cuprint(external) << (is_minus? " -= ": " += ") << from->name() << ";\n";
+        break;
+    case accumKind::atomic:
+        out << "cuda_atomic_add(";
+        is_minus && out << "-";
+        out << "&(" << cuprint(external) << "), " << from->name() << ");\n";
+        break;
     }
 }
 
