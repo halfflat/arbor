@@ -66,9 +66,14 @@ public:
         state_.solve();
     }
 
-    /// Assemble the matrix for given dt
-    void assemble(const array& dt_cell, const array& voltage, const array& current, const array& conductivity) {
-        state_.assemble(dt_cell, voltage, current, conductivity);
+    /// Assemble the matrix for solve().
+    void assemble_implicit(value_type dt_coeff, const array& dt_cell, const array& voltage, const array& current, const array& conductivity) {
+        state_.assemble_implicit(dt_coeff, dt_cell, voltage, current, conductivity);
+    }
+
+    /// Perform explicit step update via matrix product.
+    void step_explicit(value_type dt_coeff, const array& dt_cell, const array& voltage, const array& current) {
+        state_.step_explicit(dt_coeff, dt_cell, voltage, current);
     }
 
     /// Get a view of the solution

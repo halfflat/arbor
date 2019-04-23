@@ -23,9 +23,10 @@ public:
 
     array d;     // [μS]
     array u;     // [μS]
-    array rhs;   // [nA]
+    array rhs;   // [nA] (assembly) or [mV] (solve).
 
     array cv_capacitance;      // [pF]
+    array cv_elastance;        // [1/nF]
     array face_conductance;    // [μS]
     array cv_area;             // [μm^2]
 
@@ -46,6 +47,7 @@ public:
         cell_cv_divs(cell_cv_divs.begin(), cell_cv_divs.end()),
         d(size(), 0), u(size(), 0), rhs(size()),
         cv_capacitance(cap.begin(), cap.end()),
+        cv_elastance(cap.size()),
         face_conductance(cond.begin(), cond.end()),
         cv_area(area.begin(), area.end()),
         cell_to_intdom(cell_to_intdom.begin(), cell_to_intdom.end())
@@ -63,22 +65,27 @@ public:
             invariant_d[i] += gij;
             invariant_d[p[i]] += gij;
         }
+
+        for (auto i: util::make_span(n)) {
+            cv_elastance[i] = 1.e3/cv_capacitance[i]; // [1/nF]
+        }
     }
 
     const_view solution() const {
         // In this back end the solution is a simple view of the rhs, which
-        // contains the solution after the matrix_solve is performed.
+        // contains the solution after solve() or step_explicit() is performed.
         return rhs;
     }
 
 
-    // Assemble the matrix
+    // Assemble the matrix for solve().
     // Afterwards the diagonal and RHS will have been set given dt, voltage and current.
+    //   dt_coeff        [1]       (constant)
     //   dt_intdom       [ms]      (per integration domain)
     //   voltage         [mV]      (per control volume)
     //   current density [A.m^-2]  (per control volume)
     //   conductivity    [kS.m^-2] (per control volume)
-    void assemble(const_view dt_intdom, const_view voltage, const_view current, const_view conductivity) {
+    void assemble_implicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current, const_view conductivity) {
         auto cell_cv_part = util::partition_view(cell_cv_divs);
         const index_type ncells = cell_cv_part.size();
 
@@ -87,7 +94,7 @@ public:
             auto dt = dt_intdom[cell_to_intdom[m]];
 
             if (dt>0) {
-                value_type oodt_factor = 1e-3/dt; // [1/µs]
+                value_type oodt_factor = 1e-3/(dt_coeff*dt); // [1/µs]
                 for (auto i: util::make_span(cell_cv_part[m])) {
                     auto area_factor = 1e-3*cv_area[i]; // [1e-9·m²]
 
@@ -131,8 +138,53 @@ public:
         }
     }
 
-private:
+    // Perform explicit integration time step.
+    //
+    //     v' <- v - dt/c * ( A v + I )
+    //
+    // where A represents the weighted Laplacian (axial
+    // conductances) and I the trans-membrane current.
+    //
+    // Parameters:
+    //   dt_coeff        [1]       (constant)
+    //   dt_intdom       [ms]      (per integration domain)
+    //   voltage         [mV]      (per control volume)
+    //   current density [A.m^-2]  (per control volume)
+    //
+    // Store result in rhs.
 
+    void step_explicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current_density) {
+        for (auto i: util::make_span(size())) {
+            rhs[i] = current_density[i]*1e-3*cv_area[i]; // [nA]
+        }
+
+        auto cell_cv_part = util::partition_view(cell_cv_divs);
+        const index_type ncells = cell_cv_part.size();
+
+        // loop over submatrices
+        for (auto m: util::make_span(0, ncells)) {
+            auto dt_factor = dt_coeff*dt_intdom[cell_to_intdom[m]]; // [ms]
+
+            if (dt_factor>0) {
+                for (auto i = cell_cv_part[m].second; i-->cell_cv_part[m].first; ) {
+                    auto pi = parent_index[i];
+                    if (pi<i) {
+                        rhs[pi] -= u[i]*voltage[i]; // [nA]
+                        rhs[i] -= u[i]*voltage[pi];
+                    }
+
+                    rhs[i] = voltage[i] - dt_factor*cv_elastance[i]*(rhs[i] + invariant_d[i]*voltage[i]); // [mV]
+                }
+            }
+            else {
+                for (auto i: util::make_span(cell_cv_part[m])) {
+                    rhs[i] = voltage[i];
+                }
+            }
+        }
+    }
+
+private:
     std::size_t size() const {
         return parent_index.size();
     }

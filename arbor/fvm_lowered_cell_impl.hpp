@@ -229,15 +229,12 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
         sample_events_.drop_marked_events();
         PL();
 
-        // Integrate voltage by matrix solve.
+        // Integrate voltage to midpoint with explicit step.
 
-        PE(advance_integrate_matrix_build);
-        matrix_.assemble(state_->dt_intdom, state_->voltage, state_->current_density, state_->conductivity);
-        PL();
-        PE(advance_integrate_matrix_solve);
-        matrix_.solve();
+        PE(advance_integrate_matrix_product);
+        matrix_.step_explicit(0.5, state_->dt_intdom, state_->voltage, state_->current_density);
         memory::copy(matrix_.solution(), state_->voltage);
-        PL();
+        PL()
 
         // Integrate mechanism state.
 
@@ -249,6 +246,16 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
 
         PE(advance_integrate_ionupdate);
         update_ion_state();
+        PL();
+
+        // Integrate voltage to time_to with implicit step.
+
+        PE(advance_integrate_matrix_build);
+        matrix_.assemble_implicit(0.5, state_->dt_intdom, state_->voltage, state_->current_density, state_->conductivity);
+        PL();
+        PE(advance_integrate_matrix_solve);
+        matrix_.solve();
+        memory::copy(matrix_.solution(), state_->voltage);
         PL();
 
         // Update time and test for spike threshold crossings.

@@ -308,7 +308,8 @@ std::string emit_cuda_cu_source(const Module& module_, const printer_options& op
             << "auto end = events.ev_data+events.end_offset[tid_];\n"
             << "for (auto p = begin; p<end; ++p) {\n" << indent
             << "if (p->mech_id==mech_id_) {\n" << indent
-            << "auto tid_ = p->mech_index;\n";
+            << "auto tid_ = p->mech_index;\n"
+            << "auto weight = p->weight;\n";
 
         emit_api_body_cu(out, net_receive, true, true);
 
