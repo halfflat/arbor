@@ -306,9 +306,10 @@ TEST(matrix, backends)
     auto gpu_i = on_gpu(i);
     auto gpu_mg = on_gpu(mg);
 
-    flat.assemble(gpu_dt, gpu_v, gpu_i, gpu_mg);
-    intl.assemble(gpu_dt, gpu_v, gpu_i, gpu_mg);
-    fine.assemble(gpu_dt, gpu_v, gpu_i, gpu_mg);
+    auto dt_coeff = 0.5;
+    flat.assemble_implicit(dt_coeff, gpu_dt, gpu_v, gpu_i, gpu_mg);
+    intl.assemble_implicit(dt_coeff, gpu_dt, gpu_v, gpu_i, gpu_mg);
+    fine.assemble_implicit(dt_coeff, gpu_dt, gpu_v, gpu_i, gpu_mg);
 
     flat.solve();
     intl.solve();

@@ -45,6 +45,7 @@ void scatter(const T* from, T* to, const I* p, unsigned n) {
 template <typename T, typename I>
 __global__
 void assemble_matrix_fine(
+        T dt_coeff,
         T* d,
         T* rhs,
         const T* invariant_d,
@@ -69,7 +70,7 @@ void assemble_matrix_fine(
             // The 1e-3 is a constant of proportionality required to ensure that the
             // conductance (gi) values have units μS (micro-Siemens).
             // See the model documentation in docs/model for more information.
-            T oodt_factor = T(1e-3)/dt;
+            T oodt_factor = T(1e-3)/(dt_coeff*dt);
 	    T area_factor = T(1e-3)*area[tid];
 
             const auto gi = oodt_factor*cv_capacitance[tid] + area_factor*conductivity[tid];
@@ -259,6 +260,7 @@ void scatter(
 
 
 void assemble_matrix_fine(
+    fvm_value_type dt_coeff,
     fvm_value_type* d,
     fvm_value_type* rhs,
     const fvm_value_type* invariant_d,
@@ -277,7 +279,7 @@ void assemble_matrix_fine(
     const unsigned num_blocks = impl::block_count(n, block_dim);
 
     kernels::assemble_matrix_fine<<<num_blocks, block_dim>>>(
-        d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance, area,
+        dt_coeff, d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance, area,
         cv_to_cell, dt_intdom, cell_to_intdom,
         perm, n);
 }

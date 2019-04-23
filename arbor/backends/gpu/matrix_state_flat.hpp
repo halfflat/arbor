@@ -1,5 +1,6 @@
 #pragma once
 
+#include <arbor/arbexcept.hpp>
 #include <arbor/fvm_types.hpp>
 
 #include "memory/memory.hpp"
@@ -124,10 +125,10 @@ struct matrix_state_flat {
     //   dt_intdom [ms] (per integration domain)
     //   voltage   [mV]
     //   current   [nA]
-    void assemble(const_view dt_intdom, const_view voltage, const_view current, const_view conductance) {
+    void assemble_implicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current, const_view conductance) {
         // perform assembly on the gpu
         assemble_matrix_flat(
-            d.data(), rhs.data(), invariant_d.data(), voltage.data(),
+            dt_coeff, d.data(), rhs.data(), invariant_d.data(), voltage.data(),
             current.data(), conductance.data(), cv_capacitance.data(), cv_area.data(),
             cv_to_cell.data(), dt_intdom.data(), cell_to_intdom.data(), size());
     }

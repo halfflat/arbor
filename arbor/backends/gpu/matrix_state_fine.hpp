@@ -6,6 +6,7 @@
 #include <type_traits>
 
 #include <arbor/common_types.hpp>
+#include <arbor/arbexcept.hpp>
 
 #include "algorithms.hpp"
 #include "memory/memory.hpp"
@@ -442,8 +443,9 @@ public:
     //   voltage [mV]
     //   current density [A/m²]
     //   conductivity [kS/m²]
-    void assemble(const_view dt_intdom, const_view voltage, const_view current, const_view conductivity) {
+    void assemble_implicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current, const_view conductivity) {
         assemble_matrix_fine(
+            dt_coeff,
             d.data(),
             rhs.data(),
             invariant_d.data(),
@@ -469,6 +471,11 @@ public:
 
         // unpermute the solution
         packed_to_flat(rhs, solution_);
+    }
+
+    void step_explicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current_density) {
+        // No implementation yet.
+        throw arb_internal_error("step_explicit() unimplemented");
     }
 
     const_view solution() const {

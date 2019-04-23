@@ -1,6 +1,7 @@
 #pragma once
 
 #include <arbor/assert.hpp>
+#include <arbor/arbexcept.hpp>
 #include <arbor/fvm_types.hpp>
 #include <arbor/math.hpp>
 
@@ -268,9 +269,9 @@ struct matrix_state_interleaved {
     //   dt_intdom         [ms]     (per integration domain)
     //   voltage           [mV]     (per compartment)
     //   current density   [A.m^-2] (per compartment)
-    void assemble(const_view dt_intdom, const_view voltage, const_view current, const_view conductivitt) {
+    void assemble_implicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current, const_view conductivitt) {
         assemble_matrix_interleaved
-            (d.data(), rhs.data(), invariant_d.data(),
+            (dt_coeff, d.data(), rhs.data(), invariant_d.data(),
              voltage.data(), current.data(), conductivitt.data(), cv_capacitance.data(), cv_area.data(),
              matrix_sizes.data(), matrix_index.data(),
              matrix_to_cell_index.data(),
@@ -288,6 +289,11 @@ struct matrix_state_interleaved {
         interleaved_to_flat
             (rhs.data(), solution_.data(), matrix_sizes.data(), matrix_index.data(),
              padded_matrix_size(), num_matrices());
+    }
+
+    void step_explicit(value_type dt_coeff, const_view dt_intdom, const_view voltage, const_view current_density) {
+        // No implementation yet.
+        throw arb_internal_error("step_explicit() unimplemented");
     }
 
 private:

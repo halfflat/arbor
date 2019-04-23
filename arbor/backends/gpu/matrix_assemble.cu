@@ -16,6 +16,7 @@ namespace kernels {
 template <typename T, typename I>
 __global__
 void assemble_matrix_flat(
+        T dt_coeff,
         T* d,
         T* rhs,
         const T* invariant_d,
@@ -43,7 +44,7 @@ void assemble_matrix_flat(
             // The 1e-3 is a constant of proportionality required to ensure that the
             // conductance (gi) values have units μS (micro-Siemens).
             // See the model documentation in docs/model for more information.
-            T oodt_factor = 1e-3/dt; // [1/μs]
+            T oodt_factor = 1e-3/(dt_coeff*dt); // [1/μs]
             T area_factor = 1e-3*cv_area[tid]; // [1e-9·m²]
 
             auto gi = oodt_factor * cv_capacitance[tid] + area_factor*conductivity[tid]; // [μS]
@@ -66,6 +67,7 @@ void assemble_matrix_flat(
 template <typename T, typename I, unsigned BlockWidth, unsigned LoadWidth, unsigned Threads>
 __global__
 void assemble_matrix_interleaved(
+        T dt_coeff,
         T* d,
         T* rhs,
         const T* invariant_d,
@@ -119,7 +121,7 @@ void assemble_matrix_interleaved(
         // conductance (gi) values have units μS (micro-Siemens).
         // See the model documentation in docs/model for more information.
 
-        oodt_factor = dt>0? T(1e-3)/dt: 0;
+        oodt_factor = dt>0? T(1e-3)/(dt_coeff*dt): 0;
     }
 
     for (unsigned j=0u; j<max_size; j+=LoadWidth) {
@@ -155,6 +157,7 @@ void assemble_matrix_interleaved(
 } // namespace kernels
 
 void assemble_matrix_flat(
+        T dt_coeff,
         fvm_value_type* d,
         fvm_value_type* rhs,
         const fvm_value_type* invariant_d,
@@ -174,12 +177,13 @@ void assemble_matrix_flat(
     kernels::assemble_matrix_flat
         <fvm_value_type, fvm_index_type>
         <<<grid_dim, block_dim>>>
-        (d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance,
+        (dt_coeff, d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance,
          area, cv_to_cell, dt_intdom, cell_to_intdom, n);
 }
 
 //template <typename T, typename I, unsigned BlockWidth, unsigned LoadWidth, unsigned Threads>
 void assemble_matrix_interleaved(
+    T dt_coeff,
     fvm_value_type* d,
     fvm_value_type* rhs,
     const fvm_value_type* invariant_d,
@@ -205,7 +209,7 @@ void assemble_matrix_interleaved(
     kernels::assemble_matrix_interleaved
         <fvm_value_type, fvm_index_type, bd, lw, block_dim>
         <<<grid_dim, block_dim>>>
-        (d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance, area,
+        (dt_coeff, d, rhs, invariant_d, voltage, current, conductivity, cv_capacitance, area,
          sizes, starts, matrix_to_cell,
          dt_intdom, cell_to_intdom, padded_size, num_mtx);
 }

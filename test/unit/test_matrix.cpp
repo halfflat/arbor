@@ -158,7 +158,7 @@ TEST(matrix, zero_diagonal_assembled)
     // x = [ 4 5 6 7 8 9 10 ]
 
     matrix_type m(p, c, Cm, g, area, s);
-    m.assemble(dt, v, i, mg);
+    m.assemble_implicit(1.0, dt, v, i, mg);
     m.solve();
 
     vvec x;
@@ -173,12 +173,23 @@ TEST(matrix, zero_diagonal_assembled)
     dt[1] = 0;
     v[3] = -20;
     v[4] = -30;
-    m.assemble(dt, v, i, mg);
+    m.assemble_implicit(1.0, dt, v, i, mg);
     m.solve();
 
     assign(x, m.solution());
     expected = {4, 5, 6, -20, -30, 9, 10};
 
     EXPECT_TRUE(testing::seq_almost_eq<double>(expected, x));
+
+    // Multiplying dt by 2 and providing a dt_coeff of 0.5 should
+    // give us the same result.
+
+    for (auto& t: dt) { t *= 2; }
+    m.assemble_implicit(0.5, dt, v, i, mg);
+    m.solve();
+
+    vvec x2;
+    assign(x2, m.solution());
+    EXPECT_EQ(x, x2);
 }
 
