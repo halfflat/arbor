@@ -18,11 +18,12 @@ using matrix_type = matrix<arb::multicore::backend>;
 using index_type = matrix_type::index_type;
 using value_type = matrix_type::value_type;
 
+using ivec = std::vector<index_type>;
 using vvec = std::vector<value_type>;
 
 TEST(matrix, construct_from_parent_only)
 {
-    std::vector<index_type> p = {0,0,1};
+    ivec p = {0,0,1};
     matrix_type m(p, {0, 3}, vvec(3), vvec(3), vvec(3), {0});
     EXPECT_EQ(m.num_cells(), 1u);
     EXPECT_EQ(m.size(), 3u);
@@ -55,7 +56,7 @@ TEST(matrix, solve_host)
     // matrices in the range of 2x2 to 1000x1000
     {
         for(auto n : make_span(2, 1001)) {
-            auto p = std::vector<index_type>(n);
+            auto p = ivec(n);
             std::iota(p.begin()+1, p.end(), 0);
             matrix_type m(p, {0, n}, vvec(n), vvec(n), vvec(n), {0});
 
@@ -92,9 +93,9 @@ TEST(matrix, zero_diagonal)
     using util::assign;
 
     // Three matrices, sizes 3, 3 and 2, with no branching.
-    std::vector<index_type> p = {0, 0, 1, 3, 3, 5, 5};
-    std::vector<index_type> c = {0, 3, 5, 7};
-    std::vector<index_type> i = {0, 1, 2};
+    ivec p = {0, 0, 1, 3, 3, 5, 5};
+    ivec c = {0, 3, 5, 7};
+    ivec i = {0, 1, 2};
     matrix_type m(p, c, vvec(7), vvec(7), vvec(7), i);
 
     EXPECT_EQ(7u, m.size());
@@ -128,9 +129,9 @@ TEST(matrix, zero_diagonal_assembled)
     // These submatrices should leave the rhs as-is when solved.
 
     // Three matrices, sizes 3, 3 and 2, with no branching.
-    std::vector<index_type> p = {0, 0, 1, 3, 3, 5, 5};
-    std::vector<index_type> c = {0, 3, 5, 7};
-    std::vector<index_type> s = {0, 1, 2};
+    ivec p = {0, 0, 1, 3, 3, 5, 5};
+    ivec c = {0, 3, 5, 7};
+    ivec s = {0, 1, 2};
 
     // Face conductances.
     vvec g = {0, 1, 1, 0, 1, 0, 2};
@@ -163,7 +164,7 @@ TEST(matrix, zero_diagonal_assembled)
 
     vvec x;
     assign(x, m.solution());
-    std::vector<value_type> expected = {4, 5, 6, 7, 8, 9, 10};
+    vvec expected = {4, 5, 6, 7, 8, 9, 10};
 
     EXPECT_TRUE(testing::seq_almost_eq<double>(expected, x));
 
@@ -191,5 +192,62 @@ TEST(matrix, zero_diagonal_assembled)
     vvec x2;
     assign(x2, m.solution());
     EXPECT_EQ(x, x2);
+}
+
+TEST(matrix, step_explicit) {
+    using util::assign;
+    using array = matrix_type::array;
+
+    // First test case:
+    // One cell, four CVs, second CV has two children.
+    // Coefficients chosen to be +/- 1.
+
+    ivec p = {0, 0, 1, 1};
+    ivec c = {0, 4};
+    ivec s = {0};
+
+    vvec g = {0, 1, 1, 1}; // [µS]
+    vvec C = {1, 1, 1, 1}; // [pF]
+    vvec area = {1, 1, 1, 1}; // [µm²]
+
+    matrix_type m(p, c, C, g, area, s);
+
+    array J = {1e3, 2e3, 5e3, 6e3}; // [A/m²]
+    array v(4, 0); // [mV]
+    array dt(4, 1e-3); // [ms]
+
+    m.step_explicit(1.0, dt, v, J);
+    vvec x;
+    assign(x, m.solution());
+
+    // Expect x = - dt / C * area * J,
+    // as initial v is zero.
+
+    vvec expected(4, 0);
+    for (auto i: util::count_along(expected)) {
+        expected[i] = -dt[i]/C[i]*J[i]*area[i];
+    }
+    EXPECT_TRUE(testing::seq_almost_eq<double>(expected, x));
+
+    // Laplacian (axial conductance) matrix is
+    //   [  1 -1  0  0 ]
+    //   [ -1  3 -1 -1 ]
+    //   [  0 -1  1  0 ]
+    //   [  0 -1  0  1 ]
+
+    v = {1., 2., 3., 4. };
+    array Av = v; // [nA]
+    Av[0] = v[0] - v[1];
+    Av[1] = 3*v[1] - v[0] - v[2] - v[3];
+    Av[2] = v[2] - v[1];
+    Av[3] = v[3] - v[1];
+
+    for (auto i: util::count_along(expected)) {
+        expected[i] = v[i] - dt[i]/C[i]*(1e3*Av[i] + J[i]*area[i]);
+    }
+
+    m.step_explicit(1.0, dt, v, J);
+    assign(x, m.solution());
+    EXPECT_TRUE(testing::seq_almost_eq<double>(expected, x));
 }
 

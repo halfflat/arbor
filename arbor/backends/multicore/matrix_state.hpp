@@ -3,6 +3,8 @@
 #include <util/partition.hpp>
 #include <util/span.hpp>
 
+#include <io/trace.hpp>
+
 #include "multicore_common.hpp"
 
 namespace arb {
@@ -169,10 +171,9 @@ public:
                 for (auto i = cell_cv_part[m].second; i-->cell_cv_part[m].first; ) {
                     auto pi = parent_index[i];
                     if (pi<i) {
-                        rhs[pi] -= u[i]*voltage[i]; // [nA]
-                        rhs[i] -= u[i]*voltage[pi];
+                        rhs[pi] += u[i]*voltage[i]; // [nA]
+                        rhs[i] += u[i]*voltage[pi];
                     }
-
                     rhs[i] = voltage[i] - dt_factor*cv_elastance[i]*(rhs[i] + invariant_d[i]*voltage[i]); // [mV]
                 }
             }
