@@ -248,6 +248,17 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
         update_ion_state();
         PL();
 
+        // Compute current/conductances from mechanisms and gap junctions.
+
+        PE(advance_integrate_current_zero);
+        state_->zero_currents();
+        PL();
+
+        for (auto& m: mechanisms_) {
+            m->nrn_current();
+        }
+        state_->add_gj_current();
+
         // Integrate voltage to time_to with implicit step.
 
         PE(advance_integrate_matrix_build);
@@ -264,18 +275,6 @@ fvm_integration_result fvm_lowered_cell_impl<Backend>::integrate(
         threshold_watcher_.test();
         memory::copy(state_->time_to, state_->time);
         PL();
-
-        // Compute current/conductances from mechanisms and
-        // gap junctions.
-
-        PE(advance_integrate_current_zero);
-        state_->zero_currents();
-        PL();
-
-        for (auto& m: mechanisms_) {
-            m->nrn_current();
-        }
-        state_->add_gj_current();
 
         // Check for non-physical solutions:
 
