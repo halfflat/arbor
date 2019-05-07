@@ -107,6 +107,54 @@ TEST(reduce_by_key, scatter)
     EXPECT_EQ(expected, out);
 }
 
+template <typename I>
+__global__
+void key_set_pos_kernel(const I* index, int n, key_set_pos* out) {
+    unsigned tid = threadIdx.x + blockIdx.x*blockDim.x;
+
+    unsigned mask = __ballot_sync(0xffffffff, tid<n);
+    key_set_pos k(index[tid], mask);
+    out[tid] = k;
+}
+
+std::vector<key_set_pos> run_key_set_pos(const std::vector<int>& index, unsigned block_dim=128) {
+    using memory::device_vector;
+    using memory::make_view;
+
+    unsigned n = index.size();
+    device_vector<int> index_gpu(memory::make_const_view(index));
+    device_vector<key_set_pos> ks_gpu(n);
+
+    unsigned grid_dim = (n-1)/block_dim + 1;
+
+    std::vector<key_set_pos> ks(n);
+    memory::copy(ks_gpu, memory::make_view(ks));
+
+    return ks;
+}
+
+TEST(reduce_by_key, key_set_pos) {
+    using ivector = std::vector<int>;
+    using uvector = std::vector<unsigned>;
+
+    {
+	ivector index = { 2, 2, 2, 2, 3, 4, 4 };
+	auto ks = run_key_set_pos(index);
+
+	uvector expected_width = { 4, 3, 2, 1, 1, 2, 1 };
+	uvector expected_is_root = { 1, 0, 0, 0, 1, 1, 0 };
+	uvector expected_lane_id = { 0, 1, 2, 3, 4, 5, 6 };
+	uvector expected_key_mask(7, 0x7fu);
+
+	for (unsigned i = 0; i<7; ++i) {
+	    EXPECT_EQ(expected_width[i], ks[i].width);
+	    EXPECT_EQ(expected_lane_id[i], ks[i].lane_id);
+	    EXPECT_EQ(expected_key_mask[i], ks[i].key_mask);
+	    EXPECT_EQ(expected_is_root[i], ks[i].is_root);
+	}
+    }
+}
+
 // Test kernels that perform more than one reduction in a single invokation.
 // Used to reproduce and test for synchronization issues on V100 GPUs.
 

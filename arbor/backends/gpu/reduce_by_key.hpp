@@ -46,6 +46,7 @@ struct key_set_pos {
         // Find the distance to the lane id one past the end of the run.
         // Take care if this is the last run in the warp.
         width = __ffs(roots>>(lane_id+1));
+        //width = __ffs((roots|~mask)>>(lane_id+1));
         if (!width) width = num_lanes-lane_id;
     }
 };
