@@ -1,0 +1,275 @@
+\documentclass[parskip=half]{scrartcl}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[citestyle=authoryear-icomp,bibstyle=authoryear]{biblatex}
+\usepackage{booktabs}
+\usepackage[style=british]{csquotes}
+\usepackage{fontspec}
+\usepackage{mathtools}
+\usepackage{siunitx}
+\usepackage{tikz}
+\usetikzlibrary{angles,calc,intersections,quotes}
+
+\setmainfont[Numbers=Lowercase]{TeX Gyre Pagella}
+\newfontfamily\dispfamily{TeX Gyre Pagella}
+\addtokomafont{disposition}{\dispfamily}
+
+\MakeAutoQuote{«}{»}
+\DeclareMathOperator{\Res}{Res}
+
+\addbibresource{cable.bib}
+
+\newcommand{\Int}[2]{\int_{#1}^{#2}\!}
+\newcommand{\D}{\mathop{}\!d}
+
+\title{Analytic solutions to the cable equation}
+
+\author{Sam Yates}
+\date{July 29, 2019}
+
+\begin{document}
+
+\maketitle
+
+\section{The cable equation}
+
+The cable equation describes the evolution of the potential
+on a long, thin, conducting cable in a conducting medium, separated
+by a leaky dielectric. It assumes that the behaviour
+can be modelled entirely as a one dimensional problem,
+it terms of the linear conductivity of the cable $\sigma$,
+and the conductance $g$ and capacitance $c$ per unit length of the
+dielectric. The potential $v(x, t)$ then satisfies
+\begin{equation}
+    (\sigma v')' = c \dot v + g v.
+\end{equation}
+where $f'$ denotes the derivative of $f$ with respect to the first
+variable, and $\dot{f}$ the derivative with respect to the second.
+The quantities $\sigma$, $g$, and $c$ are functions of position,
+and will depend on the electrical and geometrical properties of
+the system.
+
+For a cable of radius $r(x)$ with constant bulk resistivity
+$R_L$, areal capacitance $C_M$ and areal surface resistivity
+$R_M$, these parameters are given by
+\begin{align}
+    \sigma(x) &= \pi r(x)^2 / R_L, \\
+    g(x) &= 2 \pi r(x) \sqrt{1 + r'(x)^2} / R_M, \\
+    c(x) &= 2 \pi r(x) \sqrt{1 + r'(x)^2} C_M.
+\end{align}
+Letting $\theta(x) = \arctan r'(x)$, the cable equation becomes
+\begin{equation}
+    \label{eq:constelec}
+    \frac{R_M}{2 R_L}\left(
+	2\sin\theta\cdot v' + r \cos\theta\cdot v''
+    \right) =
+    R_M C_M \dot v + v.
+\end{equation}
+
+\subsection{Approximating the gradient}
+
+In a finite volume discretization there
+will be a computation of the approximation to the gradient
+$v'(x)$ as a linear combination of two (or potentially more)
+values of the discrete approximation of the voltage for points
+near $x$.
+
+If the coefficients in this approximation are constant in
+time, they cannot account for source terms or values of the
+voltage outside the points in question. The most faithful
+such approximation should then reproduce the exact gradient $v'(x)$
+in the source-free steady state form of the cable equation,
+\begin{equation}
+    (\sigma v')' = 0.
+\end{equation}
+
+The voltage $v$ is then determined by its values at
+any two distinct points $a$ and $b$,
+\begin{equation}
+    \frac{v(x) - v(a)}{v(b) - v(a)} =
+    \frac{\displaystyle \Int{a}{x} \sigma(z)^{-1} \D z}
+	 {\displaystyle \Int{a}{b} \sigma(z)^{-1} \D z},
+\end{equation}
+and correspondingly, the gradient is
+\begin{equation}
+    \sigma(x) v'(x) =
+    \frac{v(b) - v(a)}
+	 {\displaystyle\Int{a}{b} \sigma(z)^{-1} \D z}.
+\end{equation}
+If $x$ is a point of discontinuity in $\sigma$,
+the flux $\sigma(x)v'(x)$ is nonetheless well defined.
+
+For a finite volume approximation, however, the available
+estimates may correspond instead to surface area-weighted means
+over control volumes. Consider two adjacent control volumes
+on $[a, m]$ and $[m, b]$, with mean voltages $\bar v_a$ and
+$\bar v_b$ given in terms of a weight function $w(x)$:
+\begin{align}
+    \bar v_a &= w_a^{-1} \Int{a}{m} w(x)v(x) \D x,\\
+    \bar v_b &= w_b^{-1} \Int{m}{b} w(x)v(x) \D x,
+\end{align}
+with normalizing constants $w_a$ and $w_b$. With $\sigma v' = \kappa$
+constant,
+\begin{equation}
+    \begin{aligned}
+	\bar v_a
+	&= w_a^{-1} \Int{a}{m} w(x) \left( v(m) + \kappa \Int{m}{x} \sigma(y)^{-1} \D y \right) \D x \\
+	&= v(m) + \kappa \cdot w_a^{-1} \Int{a}{m} w(x) \Int{m}{x} \sigma(y)^{-1} \D y \D x,
+    \end{aligned}
+\end{equation}
+and similarly, 
+\begin{equation}
+    \begin{aligned}
+	\bar v_b
+	&= v(m) + \kappa \cdot w_b^{-1} \Int{m}{b} w(x) \Int{m}{x} \sigma(y)^{-1} \D y \D x,
+    \end{aligned}
+\end{equation}
+Taking the difference then gives a solution for $\kappa$,
+\begin{equation}
+    \kappa = (\bar v_b - \bar v_a) \cdot \left[
+	w_b^{-1}\!\Int{m}{b} w(x)\! \Int{m}{x} \sigma(y)^{-1} \D y \D x\,-\,
+	w_a^{-1}\!\Int{a}{m} w(x)\! \Int{m}{x} \sigma(y)^{-1} \D y \D x
+	\right]^{\mathrlap{-1}}.
+\end{equation}
+
+\section{Analytic solutions for $v(x, t)$}
+
+Two important special cases for the cable equation are the cylinder,
+with $r(x)$ constant and $\theta(x)=0$, and the conical frustrum,
+with $\theta(x)$ constant and $r(x)=x\tan\theta$.
+
+Given constant electrical properties, as in (\ref{eq:constelec}),
+a zero voltage at $t=0$, and Neumann boundary conditions, what
+is $v(x, t)$?
+
+\subsection{The cylinder}
+
+Suppose the cable lies on the interval $[0, B]$, with boundary
+conditions $v'(0, t) = 0$ and $v'(B, t) = I$ and initial value
+$v(x, 0) = 0$.
+
+A change of variables gives
+\begin{equation}
+    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
+\end{equation}
+where
+\begin{equation}
+    \lambda = \sqrt{\frac{R_M r}{2 R_L}}, \quad \tau = R_M C_M, \quad b = B/\lambda,
+\end{equation}
+and $u$ satisfies
+\begin{equation}
+    \begin{aligned}
+	u''(x, t) &= \dot u(x, t) + u(x, t),\\
+	u(x, 0) &= 0,\\
+	u'(0, t) &= 0,\\
+	u'(b, t) &= 1.
+    \end{aligned}
+\end{equation}
+
+The corresponding time-invariant problem has solution $\hat u(x)$ where
+\begin{equation}
+    \hat u'' = \hat u,\quad \hat u'(0) = 0,\quad \hat u'(b) = 1,
+\end{equation}
+giving
+\begin{equation}
+    \hat u(x) = \frac{cosh x}{sinh b}.
+\end{equation}
+
+\begin{enumerate}
+    \item \textbf{TODO:} dynamic solution via S-L.
+\end{enumerate}
+
+\subsection{The tapered cable}
+
+Consider the cable as a conical frustrum on the interval $[A, B]$ with radius
+$r(x) = x \tan\theta$ and boundary conditions $v'(A, t) = 0$, $v'(B, t) = I$,
+and $v(x, 0) = 0$ (see Figure \ref{fig:tapered}). Reparameterizing gives
+\begin{equation}
+    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
+\end{equation}
+where
+\begin{equation}
+    \lambda = \frac{R_M\sin\theta}{2 R_L}, \quad \tau = R_M C_M, \quad a = A/\lambda, \quad b = B/\lambda,
+\end{equation}
+and $u$ satisfies
+\begin{equation}
+    \begin{aligned}
+	x u''(x, t) + 2 u'(x, t) &= \dot u(x, t) + u(x, t),\\
+	u(x, 0) &= 0,\\
+	u'(a, t) &= 0,\\
+	u'(b, t) &= 1.
+    \end{aligned}
+\end{equation}
+
+
+%\section{Model}
+%
+%The cable equation is given by
+%\[
+%    S'(x)c(x)\frac{\partial v(x,t)}{\partial t} =
+%    \frac{\partial}{\partial x}\left(\sigma(x)\frac{\partial v(x,t)}{\partial x}\right) -
+%    S'(x)\frac{1}{\rho(x)}v(x,t),
+%\]
+%where $\sigma(x)$ is the axial conductivity, $\rho(x)$ is the surface areal
+%resistivity, $c(x)$ is the surface areal capacitance, and $S(x)$ is the surface
+%area up to the point $x$.
+%
+%Consider a tapered cable as per Figure~\ref{fig:tapered}, with constant bulk resistivity
+%$\rho_V$, surface resistivity $\rho_M$, and areal capacitance $c$, so that
+%\begin{align*}
+%    S'(x) &= 2\pi x\tan\theta \sqrt{1+\tan^2\theta} = 2\pi x \tan\theta\csc\theta, \\
+%    \sigma(x) &= \frac{1}{\rho_V} \pi (x\tan\theta)^2,
+%\end{align*}
+%and the cable equation becomes
+%\[
+%   1.
+%\]
+
+\begin{figure}[bh]
+    \begin{tikzpicture}[scale=0.8]
+        \coordinate (origin) at (0,0);
+        \coordinate (b0) at (15,0);
+        \coordinate (b1) at ($ (b0) + (0,1.8) $);
+        \coordinate (a0) at (5,0);
+
+        \path [name path=tangent] (origin) -- (b1);
+        \path [name path=avert] (a0) -- +(0,10);
+        \path [name intersections={of=tangent and avert, by=a1}];
+
+        \coordinate (a-1) at ($ (a1)!2!(a0) $);
+        \coordinate (b-1) at ($ (b1)!2!(b0) $);
+
+        \draw [name path=axis, dashed] (origin) -- (b0);
+
+        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
+            (a1) arc (90:270:\n2 and \y1);
+
+        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
+            [densely dotted] (a-1) arc (-90:90:\n2 and \y1);
+
+        \draw let \p1 = (b1), \n2 = {0.2*\y1} in
+            (b0) ellipse (\n2 and \y1);
+
+        \draw (a1) -- (b1) (a-1) -- (b-1);
+        \draw [dotted] (origin) -- (a1) (origin) -- (a-1);
+
+        \pic [draw, "$\theta$", angle radius = 15ex, angle eccentricity=1.2] {angle = b0--origin--b1};
+
+        \coordinate (lright) at ($ (b1)!2!(b0) - (0,40pt) $);
+        \coordinate (lleft) at ($ (origin) + (lright) - (b0) $);
+
+        \path (lleft) node (x0label) { $x=0$ };
+        \path (lright) node (xblabel) { $x=B =b\lambda $ };
+        \path ($ (lleft)!(a0)!(lright) $) node (xalabel) { $x=A =a\lambda$ };
+
+        \draw [dotted] ($ (a-1)-(0,2ex) $) -- ($ (xalabel)+(0,2ex) $);
+        \draw [dotted] ($ (b-1)-(0,2ex) $) -- ($ (xblabel)+(0,2ex) $);
+        \draw [dotted] ($ (origin)-(0,2ex) $) -- ($ (x0label)+(0,2ex) $);
+    \end{tikzpicture}
+    \caption{Tapered cable coordinates.}
+    \label{fig:tapered}
+\end{figure}
+
+%\printbibliography
+\end{document}
