@@ -7,26 +7,34 @@
 \usepackage[style=british]{csquotes}
 \usepackage{fontspec}
 \usepackage{mathtools}
+\usepackage{ntheorem}
 \usepackage{siunitx}
 \usepackage{tikz}
 \usetikzlibrary{angles,calc,intersections,quotes}
 
-\setmainfont[Numbers=Lowercase]{TeX Gyre Pagella}
-\newfontfamily\dispfamily{TeX Gyre Pagella}
+\usepackage[p,osf]{cochineal}
+\usepackage[cochineal,vvarbb]{newtxmath}
+\usepackage[scale=.95]{cabin}
+
+\newfontfamily\dispfamily{Cabin}
 \addtokomafont{disposition}{\dispfamily}
 
 \MakeAutoQuote{«}{»}
 \DeclareMathOperator{\Res}{Res}
 
-\addbibresource{cable.bib}
+%\addbibresource{cable.bib}
 
 \newcommand{\Int}[2]{\int_{#1}^{#2}\!}
 \newcommand{\D}{\mathop{}\!d}
 
+\theoremstyle{nonumberplain}
+\newtheorem{lemma*}{Lemma}
+\newenvironment{proof}{\textbf{Proof.}}{\hfill$\square$}
+
 \title{Analytic solutions to the cable equation}
 
 \author{Sam Yates}
-\date{July 29, 2019}
+%\date{July 29, 2019}
 
 \begin{document}
 
@@ -38,7 +46,7 @@ The cable equation describes the evolution of the potential
 on a long, thin, conducting cable in a conducting medium, separated
 by a leaky dielectric. It assumes that the behaviour
 can be modelled entirely as a one dimensional problem,
-it terms of the linear conductivity of the cable $\sigma$,
+in terms of the linear conductivity of the cable $\sigma$,
 and the conductance $g$ and capacitance $c$ per unit length of the
 dielectric. The potential $v(x, t)$ then satisfies
 \begin{equation}
@@ -67,7 +75,192 @@ Letting $\theta(x) = \arctan r'(x)$, the cable equation becomes
     R_M C_M \dot v + v.
 \end{equation}
 
-\subsection{Approximating the gradient}
+\section{Analytic solutions for $v(x, t)$}
+
+Two important special cases for the cable equation are the cylinder,
+with $r(x)$ constant and $\theta(x)=0$, and the conical frustrum,
+with $\theta(x)$ constant and $r(x)=x\tan\theta$.
+
+Given constant electrical properties, as in \eqref{eq:constelec},
+a zero voltage at $t=0$, and Neumann boundary conditions, what
+is $v(x, t)$?
+
+\subsection{The cylinder}
+
+Suppose the cable lies on the interval $[0, B]$, with boundary
+conditions $v'(0, t) = 0$ and $v'(B, t) = I$ and initial value
+$v(x, 0) = 0$.
+
+A change of variables gives
+\begin{equation}
+    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
+\end{equation}
+where
+\begin{equation}
+    \lambda = \sqrt{\frac{R_M r}{2 R_L}}, \quad \tau = R_M C_M, \quad b = B/\lambda,
+\end{equation}
+and $u$ satisfies
+\begin{equation}
+    \begin{aligned}
+	u''(x, t) &= \dot u(x, t) + u(x, t),\\
+	u(x, 0) &= 0,\\
+	u'(0, t) &= 0,\\
+	u'(b, t) &= 1.
+    \end{aligned}
+    \label{eq:ucyl}
+\end{equation}
+
+The corresponding time-invariant problem has solution $\hat u(x)$ where
+\begin{equation}
+    \hat u'' = \hat u,\quad \hat u'(0) = 0,\quad \hat u'(b) = 1,
+\end{equation}
+giving
+\begin{equation}
+    \hat u(x) = \frac{\cosh x}{\sinh b}.
+\end{equation}
+
+Consider separable transient solutions $u(x,t)-\hat u(x)$, with zero derivative
+at $x=0$ and $x=b$, of the form $\psi(x)\eta(t)$. From \eqref{eq:ucyl},
+$\eta(t)=e^{-\lambda t}$ for some $\lambda$ and $\psi$ satisfies
+\begin{gather}
+    \label{eq:efncyl}
+    \psi'' = (1-\lambda)\psi,\\
+    \label{eq:efncylbc}
+    \quad \psi'(0)=\psi'(b)=0.
+\end{gather}
+This is a regular Sturm-Liouville problem with discrete eigenvalues $\lambda_k$
+and corresponding orthogonal eigenfunctions $\psi_k$,
+\begin{equation}
+    \langle \psi_k, \psi_{k'} \rangle =
+    \Int{0}{b} \psi_k(x)\psi_{k'}(x) \D x =0\quad\text{if $k\neq k'$}.
+\end{equation}
+
+When $\lambda<1$, $\psi(x) = c_1\cosh\sqrt{1-\lambda}x + c_2\sinh\sqrt{1-\lambda}x$,
+however the boundary conditions \eqref{eq:efncylbc} force $c_1$ and $c_2$ to be zero,
+and so there are no eigenvalues for $\lambda<1$.
+
+The first eigenvalue is then $\lambda_0 = 1$, with eigenfunction $\psi_0(x) = 1$.
+
+For $\lambda>1$, \eqref{eq:efncyl} gives
+$\psi(x) = c_1\cos\sqrt{\lambda-1}x + c_2\sin\sqrt{\lambda-1}x$. From $\psi'(0)=0$,
+we have $c_2=0$. From $\psi'(b)=1$, it follows $c_1=0$ or $\sqrt{\lambda-1}b = k\pi$
+for some positive integer $k$. Consequently we have eigenvalues and eigenfunctions,
+\begin{gather}
+    \label{eq:lkcyl}
+    \lambda_k = 1+\left(\frac{k\pi}{b}\right)^{\mathrlap{2}},\\
+    \psi_k(x) = \cos \frac{k\pi x}{b}.
+\end{gather}
+for integers $k\geq 0$, including the constant $\lambda=1$ case.
+
+The time-dependent solution $u(x, t)$ then is
+\begin{equation}
+    u(x,t) = \hat u(x) + \sum_{k=0}^{\infty} a_k e^{-\lambda_k t}\psi_k(x),
+\end{equation}
+with $a_k$ determined by the initial conditions,
+\begin{equation}
+    0 = \langle u(x,0), \psi_k(x) \rangle
+    = \langle \hat u(x), \psi_k(x) \rangle
+    + a_k\langle \psi_k(x), \psi_k(x)\rangle,
+\end{equation}
+with
+\begin{align}
+    \langle \hat u(x), \psi_k(x) \rangle
+    = \frac{1}{\sinh b}\Int{0}{b}\cosh x\cos\frac{k\pi}{b}x \D x
+    = (-1)^k\lambda_k^{-1},
+    \intertext{and}
+    \langle \psi_k(x), \psi_k(x) \rangle
+    = \Int{0}{b}\cos^2 \frac{k\pi}{b}x \D x
+    =
+    \begin{cases}
+	b & \text{if $k=0$,}\\
+	\frac{b}{2} & \text{otherwise.}\\
+    \end{cases}
+\end{align}
+Consequently,
+\begin{equation}
+    \label{eq:cylseries}
+    u(x,t) = \frac{\cosh x}{\sinh b} - \frac{1}{b}e^{-t} -
+    \frac{2}{b}\sum_{k=1}^{\infty} (-1)^k \lambda_k^{-1} e^{-\lambda_k t} \cos\frac{k\pi x}{b},
+\end{equation}
+with $\lambda_k$ given in \eqref{eq:lkcyl}. A discussion on the residuals in this series can
+be found in Appendix~\ref{ap:cylcomp}.
+
+Note that the time derivative $\dot u(x,t)$ can be expressed in terms of Jacobi theta functions:
+\begin{equation}
+    \begin{aligned}
+	\dot u(x,t) &= \frac{1}{b}e^{-t}\left(1+2\sum_{k=1}^{\infty} (-1)^ke^{-\frac{\pi^2 k^2 t}{b}}\cos\frac{k\pi x}{b}\right)\\
+	&= \frac{1}{b}e^{-t}\theta_4\left(\frac{\pi x}{2 b}\middle| \frac{i\pi t}{b^2}\right).
+    \end{aligned}
+\end{equation}
+
+\subsection{The tapered cable}
+
+Consider the cable as a conical frustrum on the interval $[A, B]$ with radius
+$r(x) = x \tan\theta$ and boundary conditions $v'(A, t) = 0$, $v'(B, t) = I$,
+and $v(x, 0) = 0$ (see Figure \ref{fig:tapered}). Reparameterizing gives
+\begin{equation}
+    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
+\end{equation}
+where
+\begin{equation}
+    \lambda = \frac{R_M\sin\theta}{2 R_L}, \quad \tau = R_M C_M, \quad a = A/\lambda, \quad b = B/\lambda,
+\end{equation}
+and $u$ satisfies
+\begin{equation}
+    \begin{aligned}
+	x u''(x, t) + 2 u'(x, t) &= \dot u(x, t) + u(x, t),\\
+	u(x, 0) &= 0,\\
+	u'(a, t) &= 0,\\
+	u'(b, t) &= 1.
+    \end{aligned}
+\end{equation}
+
+\begin{figure}[tb]
+    \begin{tikzpicture}[scale=0.8]
+        \coordinate (origin) at (0,0);
+        \coordinate (b0) at (15,0);
+        \coordinate (b1) at ($ (b0) + (0,1.8) $);
+        \coordinate (a0) at (5,0);
+
+        \path [name path=tangent] (origin) -- (b1);
+        \path [name path=avert] (a0) -- +(0,10);
+        \path [name intersections={of=tangent and avert, by=a1}];
+
+        \coordinate (a-1) at ($ (a1)!2!(a0) $);
+        \coordinate (b-1) at ($ (b1)!2!(b0) $);
+
+        \draw [name path=axis, dashed] (origin) -- (b0);
+
+        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
+            (a1) arc (90:270:\n2 and \y1);
+
+        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
+            [densely dotted] (a-1) arc (-90:90:\n2 and \y1);
+
+        \draw let \p1 = (b1), \n2 = {0.2*\y1} in
+            (b0) ellipse (\n2 and \y1);
+
+        \draw (a1) -- (b1) (a-1) -- (b-1);
+        \draw [dotted] (origin) -- (a1) (origin) -- (a-1);
+
+        \pic [draw, "$\theta$", angle radius = 15ex, angle eccentricity=1.2] {angle = b0--origin--b1};
+
+        \coordinate (lright) at ($ (b1)!2!(b0) - (0,40pt) $);
+        \coordinate (lleft) at ($ (origin) + (lright) - (b0) $);
+
+        \path (lleft) node (x0label) { $x=0$ };
+        \path (lright) node (xblabel) { $x=B =b\lambda $ };
+        \path ($ (lleft)!(a0)!(lright) $) node (xalabel) { $x=A =a\lambda$ };
+
+        \draw [dotted] ($ (a-1)-(0,2ex) $) -- ($ (xalabel)+(0,2ex) $);
+        \draw [dotted] ($ (b-1)-(0,2ex) $) -- ($ (xblabel)+(0,2ex) $);
+        \draw [dotted] ($ (origin)-(0,2ex) $) -- ($ (x0label)+(0,2ex) $);
+    \end{tikzpicture}
+    \caption{Tapered cable coordinates.}
+    \label{fig:tapered}
+\end{figure}
+
+\section{Approximating the gradient}
 
 In a finite volume discretization there
 will be a computation of the approximation to the gradient
@@ -133,143 +326,47 @@ Taking the difference then gives a solution for $\kappa$,
 	\right]^{\mathrlap{-1}}.
 \end{equation}
 
-\section{Analytic solutions for $v(x, t)$}
+\newpage
+\appendix
+\section{Series computation for the voltage on the uniform cylinder}
+\label{ap:cylcomp}
 
-Two important special cases for the cable equation are the cylinder,
-with $r(x)$ constant and $\theta(x)=0$, and the conical frustrum,
-with $\theta(x)$ constant and $r(x)=x\tan\theta$.
+How many terms in the series \eqref{eq:cylseries} need to be computed for a given tolerance?
+We obtain bounds on the remainders in the series as follows.
 
-Given constant electrical properties, as in (\ref{eq:constelec}),
-a zero voltage at $t=0$, and Neumann boundary conditions, what
-is $v(x, t)$?
-
-\subsection{The cylinder}
-
-Suppose the cable lies on the interval $[0, B]$, with boundary
-conditions $v'(0, t) = 0$ and $v'(B, t) = I$ and initial value
-$v(x, 0) = 0$.
-
-A change of variables gives
+Let $u_n(x,t)$ be the partial sum up to $k=n-1$ in \eqref{eq:cylseries}, and $r_n(x,t) = u(x,t) - u_n(x,t)$
+be the remainder,
 \begin{equation}
-    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
+    r_n(x,t) = -\frac{2}{b}\sum_{k=n}^{\infty} (-1)^k\lambda_k^{-1}e^{-\lambda_k t}\cos\frac{k\pi x}{b}.
+\end{equation}
+Then $|r_n(x,t)|\leq R_n(t)$ for all $x$, with
+\begin{equation}
+    R_n(t) = \frac{2}{b}\sum_{k=n}^{\infty} \lambda_k^{-1}e^{-\lambda_k t}\\
+    = \frac{2t}{b}\sum_{k=n}^{\infty} l(k)^{-1}e^{-l(k)}\\
 \end{equation}
 where
+\[
+    l(z) = \left(1+\left(\frac{z\pi}{b}\right)^2\right)\cdot t.
+\]
+The summand is monotonically decreasing in $k$, so
 \begin{equation}
-    \lambda = \sqrt{\frac{R_M r}{2 R_L}}, \quad \tau = R_M C_M, \quad b = B/\lambda,
-\end{equation}
-and $u$ satisfies
-\begin{equation}
-    \begin{aligned}
-	u''(x, t) &= \dot u(x, t) + u(x, t),\\
-	u(x, 0) &= 0,\\
-	u'(0, t) &= 0,\\
-	u'(b, t) &= 1.
-    \end{aligned}
+    \label{eq:rnigamma}
+    R_n(t)
+    \leq \frac{2t}{b}\Int{n}{\infty} l(k)^{-1}e^{-l(k)}\D k
+    = \frac{\sqrt{t}}{b} \Int{\lambda_n t}{\infty} e^{-z}z^{-\frac{3}{2}} \D z.
 \end{equation}
 
-The corresponding time-invariant problem has solution $\hat u(x)$ where
+For $a>0$, $s>0$, integrating by parts gives
+$\displaystyle \Int{a}{\infty} e^{-z}z^{-s}\D z < e^{-a}a^{-s}$,
+and so
 \begin{equation}
-    \hat u'' = \hat u,\quad \hat u'(0) = 0,\quad \hat u'(b) = 1,
+    R_n(t) < \frac{1}{b t}\lambda_n^{-3/2}e^{-\lambda_n t}.
 \end{equation}
-giving
+In particular, for a desired $\epsilon>0$,
 \begin{equation}
-    \hat u(x) = \frac{cosh x}{sinh b}.
+    n > (t \epsilon)^{-1/3}\cdot\frac{b^\frac{2}{3}}{\pi}
+    \implies
+    R_n(t) < \epsilon.
 \end{equation}
-
-\begin{enumerate}
-    \item \textbf{TODO:} dynamic solution via S-L.
-\end{enumerate}
-
-\subsection{The tapered cable}
-
-Consider the cable as a conical frustrum on the interval $[A, B]$ with radius
-$r(x) = x \tan\theta$ and boundary conditions $v'(A, t) = 0$, $v'(B, t) = I$,
-and $v(x, 0) = 0$ (see Figure \ref{fig:tapered}). Reparameterizing gives
-\begin{equation}
-    v(x, t) = \lambda I\cdot u(x/\lambda, t/\tau),
-\end{equation}
-where
-\begin{equation}
-    \lambda = \frac{R_M\sin\theta}{2 R_L}, \quad \tau = R_M C_M, \quad a = A/\lambda, \quad b = B/\lambda,
-\end{equation}
-and $u$ satisfies
-\begin{equation}
-    \begin{aligned}
-	x u''(x, t) + 2 u'(x, t) &= \dot u(x, t) + u(x, t),\\
-	u(x, 0) &= 0,\\
-	u'(a, t) &= 0,\\
-	u'(b, t) &= 1.
-    \end{aligned}
-\end{equation}
-
-
-%\section{Model}
-%
-%The cable equation is given by
-%\[
-%    S'(x)c(x)\frac{\partial v(x,t)}{\partial t} =
-%    \frac{\partial}{\partial x}\left(\sigma(x)\frac{\partial v(x,t)}{\partial x}\right) -
-%    S'(x)\frac{1}{\rho(x)}v(x,t),
-%\]
-%where $\sigma(x)$ is the axial conductivity, $\rho(x)$ is the surface areal
-%resistivity, $c(x)$ is the surface areal capacitance, and $S(x)$ is the surface
-%area up to the point $x$.
-%
-%Consider a tapered cable as per Figure~\ref{fig:tapered}, with constant bulk resistivity
-%$\rho_V$, surface resistivity $\rho_M$, and areal capacitance $c$, so that
-%\begin{align*}
-%    S'(x) &= 2\pi x\tan\theta \sqrt{1+\tan^2\theta} = 2\pi x \tan\theta\csc\theta, \\
-%    \sigma(x) &= \frac{1}{\rho_V} \pi (x\tan\theta)^2,
-%\end{align*}
-%and the cable equation becomes
-%\[
-%   1.
-%\]
-
-\begin{figure}[bh]
-    \begin{tikzpicture}[scale=0.8]
-        \coordinate (origin) at (0,0);
-        \coordinate (b0) at (15,0);
-        \coordinate (b1) at ($ (b0) + (0,1.8) $);
-        \coordinate (a0) at (5,0);
-
-        \path [name path=tangent] (origin) -- (b1);
-        \path [name path=avert] (a0) -- +(0,10);
-        \path [name intersections={of=tangent and avert, by=a1}];
-
-        \coordinate (a-1) at ($ (a1)!2!(a0) $);
-        \coordinate (b-1) at ($ (b1)!2!(b0) $);
-
-        \draw [name path=axis, dashed] (origin) -- (b0);
-
-        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
-            (a1) arc (90:270:\n2 and \y1);
-
-        \draw let \p1 = (a1), \n2 = {0.2*\y1} in
-            [densely dotted] (a-1) arc (-90:90:\n2 and \y1);
-
-        \draw let \p1 = (b1), \n2 = {0.2*\y1} in
-            (b0) ellipse (\n2 and \y1);
-
-        \draw (a1) -- (b1) (a-1) -- (b-1);
-        \draw [dotted] (origin) -- (a1) (origin) -- (a-1);
-
-        \pic [draw, "$\theta$", angle radius = 15ex, angle eccentricity=1.2] {angle = b0--origin--b1};
-
-        \coordinate (lright) at ($ (b1)!2!(b0) - (0,40pt) $);
-        \coordinate (lleft) at ($ (origin) + (lright) - (b0) $);
-
-        \path (lleft) node (x0label) { $x=0$ };
-        \path (lright) node (xblabel) { $x=B =b\lambda $ };
-        \path ($ (lleft)!(a0)!(lright) $) node (xalabel) { $x=A =a\lambda$ };
-
-        \draw [dotted] ($ (a-1)-(0,2ex) $) -- ($ (xalabel)+(0,2ex) $);
-        \draw [dotted] ($ (b-1)-(0,2ex) $) -- ($ (xblabel)+(0,2ex) $);
-        \draw [dotted] ($ (origin)-(0,2ex) $) -- ($ (x0label)+(0,2ex) $);
-    \end{tikzpicture}
-    \caption{Tapered cable coordinates.}
-    \label{fig:tapered}
-\end{figure}
-
 %\printbibliography
 \end{document}
