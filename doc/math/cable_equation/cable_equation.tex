@@ -22,7 +22,7 @@
 \MakeAutoQuote{«}{»}
 \DeclareMathOperator{\Res}{Res}
 
-%\addbibresource{cable.bib}
+\addbibresource{cable.bib}
 
 \newcommand{\Int}[2]{\int_{#1}^{#2}\!}
 \newcommand{\D}{\mathop{}\!d}
@@ -124,22 +124,19 @@ at $x=0$ and $x=b$, of the form $\psi(x)\eta(t)$. From \eqref{eq:ucyl},
 $\eta(t)=e^{-\lambda t}$ for some $\lambda$ and $\psi$ satisfies
 \begin{gather}
     \label{eq:efncyl}
-    \psi'' = (1-\lambda)\psi,\\
+    \psi'' + (\lambda-1)\psi = 0,\\
     \label{eq:efncylbc}
     \quad \psi'(0)=\psi'(b)=0.
 \end{gather}
-This is a regular Sturm-Liouville problem with discrete eigenvalues $\lambda_k$
-and corresponding orthogonal eigenfunctions $\psi_k$,
+This is a regular Sturm-Liouville problem with discrete non-negative eigenvalues
+$\lambda_k-1$ and corresponding orthogonal eigenfunctions $\psi_k$,
 \begin{equation}
     \langle \psi_k, \psi_{k'} \rangle =
     \Int{0}{b} \psi_k(x)\psi_{k'}(x) \D x =0\quad\text{if $k\neq k'$}.
 \end{equation}
 
-When $\lambda<1$, $\psi(x) = c_1\cosh\sqrt{1-\lambda}x + c_2\sinh\sqrt{1-\lambda}x$,
-however the boundary conditions \eqref{eq:efncylbc} force $c_1$ and $c_2$ to be zero,
-and so there are no eigenvalues for $\lambda<1$.
-
-The first eigenvalue is then $\lambda_0 = 1$, with eigenfunction $\psi_0(x) = 1$.
+The least eigenvalue corresponds to $\lambda_0 = 1$ with eigenfunction
+$\psi_0(x)=1$.
 
 For $\lambda>1$, \eqref{eq:efncyl} gives
 $\psi(x) = c_1\cos\sqrt{\lambda-1}x + c_2\sin\sqrt{\lambda-1}x$. From $\psi'(0)=0$,
@@ -207,6 +204,7 @@ where
 \end{equation}
 and $u$ satisfies
 \begin{equation}
+    \label{eq:conu}
     \begin{aligned}
 	x u''(x, t) + 2 u'(x, t) &= \dot u(x, t) + u(x, t),\\
 	u(x, 0) &= 0,\\
@@ -259,6 +257,102 @@ and $u$ satisfies
     \caption{Tapered cable coordinates.}
     \label{fig:tapered}
 \end{figure}
+
+Proceeding similarly to the cylinder problem, the solution can be presented as a sum of
+a time-invariant solution $\hat u$ and a series of transients that are solutions to
+a Sturm--Liouville problem.
+
+The time-invariant problem is
+\begin{equation}
+    \begin{gathered}
+	x\hat u''(x) + 2\hat u'(x) - \hat u(x) = 0,\\
+	\hat u'(a) = 0,\quad \hat u'(b) = 1.
+    \end{gathered}
+\end{equation}
+
+Multiplying by $x$ gives a differential equation of the form
+\begin{equation}
+    \label{eq:conicmu}
+    x^2 g''(x) + 2x g'(x) + \mu x g(x) = 0
+\end{equation}
+for some $\mu$. This has solutions in terms of Bessel functions: if $C_\nu$
+is a solution to the Bessel equation
+\begin{equation}
+    z^2 f''(z) + z f'(z) - (z^2 - \nu^2) f(z) = 0,
+\end{equation}
+then $g(x) = x^{-\frac{1}{2}}C_1(\alpha x^\frac{1}{2})$ satisfies
+\begin{equation}
+    \label{eq:besg}
+    x^2 g''(x) + x g'(x) + \frac{\alpha^2}{4} x g(x) = 0.
+\end{equation}
+Similarly, if $Z_\nu$ is a solution to the modified Bessel equation
+\begin{equation}
+    z^2 f''(z) + z f'(z) - (z^2 + \nu^2) f(z) = 0,
+\end{equation}
+then $g(x) = x^{-\frac{1}{2}}Z_1(\alpha x^\frac{1}{2})$ satisfies
+\begin{equation}
+    \label{eq:modbesg}
+    x^2 g''(x) + x g'(x) - \frac{\alpha^2}{4} x g(x) = 0.
+\end{equation}
+
+The time-invariant solution $\hat u(x)$ satisfies \eqref{eq:modbesg} with $\alpha=2$, and so
+can be written as
+\begin{equation}
+    \hat u(x) = \frac{1}{\sqrt{x}} \left(c_1 I_1(2\sqrt{x}) - c_2 K_1(2\sqrt{x})\right),
+\end{equation}
+with derivative
+\begin{equation}
+    \hat u'(x) = \frac{1}{x} \left(c_1 I_2(2\sqrt{x}) + c_2 K_2(2\sqrt{x})\right).
+\end{equation}
+Solving for the boundary conditions $\hat u'(a)=0$, $\hat u'(b)=1$ then gives the coefficients
+\begin{equation}
+    c_1 = \frac{b K_2(2\sqrt{a})}{I_2(2\sqrt{b})K_2(2\sqrt{a})-I_2(2\sqrt{a})K_2(2\sqrt{b})},\quad
+    c_2 = \frac{-b I_2(2\sqrt{a})}{I_2(2\sqrt{b})K_2(2\sqrt{a})-I_2(2\sqrt{a})K_2(2\sqrt{b})}.
+\end{equation}
+
+Separable transient solutions $u(x,t)-\hat u(x)$ will be of the form $e^{-\lambda t}\psi(x)$,
+where $\psi(x)$ satisfies
+\begin{gather}
+    \label{eq:conpsi1}
+    x\psi''(x) + 2\psi'(x) + (\lambda-1)\psi(x) = 0\\
+    \label{eq:conpsi2}
+    \psi'(a) = \psi'(b) = 0.
+\end{gather}
+Multiplying \eqref{eq:conpsi1} by $x$ gives
+\begin{equation}
+    \label{eq:conpsils}
+    x^2\psi''(x) + 2x\psi'(x) + (\lambda-1)x \psi(x) =
+    \frac{d}{dx}(x^2\psi'(x)) + (\lambda-1)x \psi(x) = 0,
+\end{equation}
+which together with \eqref{eq:conpsi2} forms a regular Sturm--Liouville problem with
+non-negative eigenvalues $\lambda_k-1$ and corresponding orthogonal eigenfunctions
+$\psi_k(x)$ with respect to the weight function $\rho(x) = x$.
+
+For $\lambda_0=1$, the eigenfunction is $\psi_0(x)=1$. For $\lambda_k>0$,
+equation \eqref{eq:conpsils} is of the form \eqref{eq:besg}, with $\alpha=2\sqrt{\lambda_k-1}$,
+giving
+\begin{equation}
+    \psi_k(x) = \frac{1}{\sqrt{x}} \left(c_1^{(k)} J_1(2\sqrt{(\lambda_k-1)x})) + c_2^{(k)} Y_1(2\sqrt{(\lambda_k-1)x})\right),
+\end{equation}
+with derivative
+\begin{equation}
+    \psi_k'(x) = - \frac{\sqrt{\lambda_k-1}}{x} \left(c_1^{(k)} J_2(2\sqrt{(\lambda_k-1)x})) + c_2^{(k)} Y_2(2\sqrt{(\lambda_k-1)x})\right).
+\end{equation}
+
+The boundary conditions $\psi_k'(a) = \psi_k'(b) = 0$ imply
+\begin{gather}
+    f_2\left(\sqrt{\tfrac{b}{a}}, 2\sqrt{(\lambda_k-1)a}\right) = 0,
+    \intertext{where $f_\nu$ is the cross-product Bessel function}
+    f_\nu(q, x) = J_\nu(qx)Y_\nu(x)-J_\nu(x)Y_\nu(qx).
+\end{gather}
+The eigenvalues for $k>0$ are then
+\begin{equation}
+    \lambda_k = \frac{\chi_{2, k}\left(\sqrt{\frac{b}{a}}\right)^2}{4a} + 1,
+\end{equation}
+where $\chi_{\nu, k}(q)$ is the $k$th positive root of $f_\nu(q, x)=0$. These solutions
+can be computed efficiently via a Newton--Raphson scheme \autocite{sorolla2013}.
+
+
 
 \section{Approximating the gradient}
 
@@ -368,5 +462,5 @@ In particular, for a desired $\epsilon>0$,
     \implies
     R_n(t) < \epsilon.
 \end{equation}
-%\printbibliography
+\printbibliography
 \end{document}
