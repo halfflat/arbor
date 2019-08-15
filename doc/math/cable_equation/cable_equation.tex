@@ -151,13 +151,13 @@ for integers $k\geq 0$, including the constant $\lambda=1$ case.
 
 The time-dependent solution $u(x, t)$ then is
 \begin{equation}
-    u(x,t) = \hat u(x) + \sum_{k=0}^{\infty} a_k e^{-\lambda_k t}\psi_k(x),
+    u(x,t) = \hat u(x) - \sum_{k=0}^{\infty} a_k e^{-\lambda_k t}\psi_k(x),
 \end{equation}
 with $a_k$ determined by the initial conditions,
 \begin{equation}
     0 = \langle u(x,0), \psi_k(x) \rangle
     = \langle \hat u(x), \psi_k(x) \rangle
-    + a_k\langle \psi_k(x), \psi_k(x)\rangle,
+    - a_k\langle \psi_k(x), \psi_k(x)\rangle,
 \end{equation}
 with
 \begin{align}
@@ -305,10 +305,14 @@ with derivative
 \begin{equation}
     \hat u'(x) = \frac{1}{x} \left(c_1 I_2(2\sqrt{x}) + c_2 K_2(2\sqrt{x})\right).
 \end{equation}
-Solving for the boundary conditions $\hat u'(a)=0$, $\hat u'(b)=1$ then gives the coefficients
+Solving for the boundary conditions $\hat u'(a)=0$, $\hat u'(b)=1$ then determines the coefficients
+$c_1$ and $c_2$, giving
 \begin{equation}
-    c_1 = \frac{b K_2(2\sqrt{a})}{I_2(2\sqrt{b})K_2(2\sqrt{a})-I_2(2\sqrt{a})K_2(2\sqrt{b})},\quad
-    c_2 = \frac{-b I_2(2\sqrt{a})}{I_2(2\sqrt{b})K_2(2\sqrt{a})-I_2(2\sqrt{a})K_2(2\sqrt{b})}.
+    \label{eq:conuhat}
+    \hat u(x) =
+    \frac{b}{\sqrt{x}}\cdot
+    \frac{K_2(2\sqrt{a})I_1(2\sqrt{x}) + I_2(2\sqrt{a})K_1(2\sqrt{x})}
+    {K_2(2\sqrt{a})I_2(2\sqrt{b})-I_2(2\sqrt{a})K_2(2\sqrt{b})}.
 \end{equation}
 
 Separable transient solutions $u(x,t)-\hat u(x)$ will be of the form $e^{-\lambda t}\psi(x)$,
@@ -330,28 +334,107 @@ non-negative eigenvalues $\lambda_k-1$ and corresponding orthogonal eigenfunctio
 $\psi_k(x)$ with respect to the weight function $\rho(x) = x$.
 
 For $\lambda_0=1$, the eigenfunction is $\psi_0(x)=1$. For $\lambda_k>0$,
-equation \eqref{eq:conpsils} is of the form \eqref{eq:besg}, with $\alpha=2\sqrt{\lambda_k-1}$,
-giving
+equation \eqref{eq:conpsils} is of the form \eqref{eq:besg}, with $\alpha=2\sqrt{\lambda_k-1}$.
+Writing $\omega_k$ for $\sqrt{\lambda_k-1}$, we have
 \begin{equation}
-    \psi_k(x) = \frac{1}{\sqrt{x}} \left(c_1^{(k)} J_1(2\sqrt{(\lambda_k-1)x})) + c_2^{(k)} Y_1(2\sqrt{(\lambda_k-1)x})\right),
+    \psi_k(x) = \frac{1}{\sqrt{x}} \left(c_1^{(k)} J_1(2\omega_k \sqrt{x})) + c_2^{(k)} Y_1(2\omega_k \sqrt{x})\right),
 \end{equation}
 with derivative
 \begin{equation}
-    \psi_k'(x) = - \frac{\sqrt{\lambda_k-1}}{x} \left(c_1^{(k)} J_2(2\sqrt{(\lambda_k-1)x})) + c_2^{(k)} Y_2(2\sqrt{(\lambda_k-1)x})\right).
+    \psi_k'(x) = - \frac{\omega_k}{x} \left(c_1^{(k)} J_2(2\omega_k\sqrt{x})) + c_2^{(k)} Y_2(2\omega_k\sqrt{x})\right).
 \end{equation}
 
 The boundary conditions $\psi_k'(a) = \psi_k'(b) = 0$ imply
 \begin{gather}
-    f_2\left(\sqrt{\tfrac{b}{a}}, 2\sqrt{(\lambda_k-1)a}\right) = 0,
+    f_2\left(\sqrt{\tfrac{b}{a}}, 2\omega_k\sqrt{a}\right) = 0,
     \intertext{where $f_\nu$ is the cross-product Bessel function}
     f_\nu(q, x) = J_\nu(qx)Y_\nu(x)-J_\nu(x)Y_\nu(qx).
 \end{gather}
-The eigenvalues for $k>0$ are then
+The eigenvalues for $k>0$ are then $\lambda_k=1+\omega_k^2$ with
 \begin{equation}
-    \lambda_k = \frac{\chi_{2, k}\left(\sqrt{\frac{b}{a}}\right)^2}{4a} + 1,
+    \label{eq:conomegak}
+    \omega_k =  \frac{\chi_{2, k}\left(\sqrt{\scriptstyle \frac{b}{a}}\right)}{2\sqrt{a}}.
 \end{equation}
 where $\chi_{\nu, k}(q)$ is the $k$th positive root of $f_\nu(q, x)=0$. These solutions
 can be computed efficiently via a Newton--Raphson scheme \autocite{sorolla2013}.
+$c_1^{(k)}$ and $c_2^{(k)}$ are then determined up to scale; for example, we can
+set
+\begin{equation}
+    c_1^{(k)} = J_2(2\omega_k\sqrt{x})^{-1},\qquad
+    c_2^{(k)} = -Y_2(2\omega_k\sqrt{x})^{-1},
+\end{equation}
+giving
+\begin{equation}
+    \label{eq:conpsik}
+    \psi_k(x) =\frac{1}{\sqrt{x}}\left(
+    \frac{J_1(2\omega_k\sqrt{x})}{J_2(2\omega_k\sqrt{a})}
+    -
+    \frac{Y_1(2\omega_k\sqrt{x})}{Y_2(2\omega_k\sqrt{a})}
+    \right).
+\end{equation}
+
+The complete solution then will be
+\begin{equation}
+    \label{eq:conuxt}
+    u(x,t) = \hat u(x) - \sum_{k=0}^{\infty} a_k e^{-\lambda t} \psi_k(x),
+\end{equation}
+where the $a_k$ will be determined by the initial conditions.
+
+As the $\psi_k$ are
+eigenfunctions of the Sturm-Liouville problem (\ref{eq:conpsils}, \ref{eq:conpsi2}), they
+are orthogonal with respect to the inner product with weight function $\rho(x)=x$,
+\begin{equation}
+    \langle f, g \rangle = \Int{a}{b} xf(x)g(x) \D x.
+\end{equation}
+Taking the inner product of $\langle u(x,0), \psi_k(x)\rangle$ then gives for each $k$,
+\begin{equation}
+    a_k = \frac{\Int{a}{b} x \hat u(x)\psi_k(x) \D x}{\Int{a}{b} x \psi_k(x)^2 \D x}.
+\end{equation}
+
+For $k=0$,
+\begin{equation}
+    \begin{aligned}
+        a_0 &= \frac{1}{b-a} \cdot \Int{a}{b} x \hat u(x) \D x\\
+        &= \frac{1}{b-a} \cdot \left. x^2\hat u'(x)\right|_a^b\\
+        &= \frac{b^2}{b-a}.
+    \end{aligned}
+\end{equation}
+(See Appendix \ref{ap:conid} for the derivation of this and the following integrals.)
+
+For $k>0$,
+\begin{equation}
+    \begin{aligned}
+        \Int{a}{b} x u^(x)\psi_k(x) \D x
+        &= \frac{1}{1+\omega_k^2} \cdot \left. (x^2\hat u'(x)\psi_k(x)-x^2\hat u(x)\psi'_k(x))\right|_a^b\\
+        &= \lambda_k^{-1} b^2\psi_k(b),
+    \end{aligned}
+\end{equation}
+and
+\begin{equation}
+    \begin{aligned}
+        \Int{a}{b} x \psi_k(x)^2 \D x
+        &= \left.
+        x^2\psi_k(x)^2 + \frac{x^2}{\omega_k^2}\psi_k(x)\psi'_k(x)
+        + \frac{x^3}{\omega_k^2}\psi'_k(x)^2
+        \right|_a^b\\
+        &= b^2\psi_k(b)^2 - a^2\psi_k(a)^2,
+    \end{aligned}
+\end{equation}
+giving
+\begin{equation}
+    a_k = \frac{1}{\lambda_k}\cdot \frac{b^2\psi_k(b)}{b^2\psi_k(b)^2-a^2\psi_k(a)^2}.
+\end{equation}
+
+This gives the time-dependent solution
+\begin{equation}
+    u(x,t) = \hat u(x) - \frac{b^2}{b-a}e^{-t} -
+    \sum_{k=1}^{\infty} \lambda_k^{-1} e^{-\lambda_k t}
+    \frac{b^2\psi_k(b)\psi_k(x)}{b^2\psi_k(b)^2-a^2\psi_k(a)^2}
+\end{equation}
+where $\hat u$ is given by \eqref{eq:conuhat}, $\psi_k$ is given by \eqref{eq:conpsik},
+and $\lambda_k = 1 + \omega_k^2$ is given by \eqref{eq:conomegak}.
+
+
 
 
 \section{Approximating the gradient}
