@@ -213,7 +213,7 @@ and $u$ satisfies
     \end{aligned}
 \end{equation}
 
-\begin{figure}[tb]
+\begin{figure}[tbh]
     \begin{tikzpicture}[scale=0.8]
         \coordinate (origin) at (0,0);
         \coordinate (b0) at (15,0);
@@ -221,7 +221,7 @@ and $u$ satisfies
         \coordinate (a0) at (5,0);
 
         \path [name path=tangent] (origin) -- (b1);
-        \path [name path=avert] (a0) -- +(0,10);
+        \path [name path=avert] (a0) -- +(0,2);
         \path [name intersections={of=tangent and avert, by=a1}];
 
         \coordinate (a-1) at ($ (a1)!2!(a0) $);
@@ -404,7 +404,7 @@ For $k=0$,
 For $k>0$,
 \begin{equation}
     \begin{aligned}
-        \Int{a}{b} x u^(x)\psi_k(x) \D x
+        \Int{a}{b} x \hat u(x)\psi_k(x) \D x
         &= \frac{1}{1+\omega_k^2} \cdot \left. (x^2\hat u'(x)\psi_k(x)-x^2\hat u(x)\psi'_k(x))\right|_a^b\\
         &= \lambda_k^{-1} b^2\psi_k(b),
     \end{aligned}
@@ -433,8 +433,6 @@ This gives the time-dependent solution
 \end{equation}
 where $\hat u$ is given by \eqref{eq:conuhat}, $\psi_k$ is given by \eqref{eq:conpsik},
 and $\lambda_k = 1 + \omega_k^2$ is given by \eqref{eq:conomegak}.
-
-
 
 
 \section{Approximating the gradient}
