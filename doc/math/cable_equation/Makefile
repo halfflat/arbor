@@ -1,6 +1,6 @@
 SOURCES := cable_equation.tex
 
-LATEXMK := latexmk -e '$$clean_ext=q/bbl run.xml/' -xelatex -use-make -halt-on-error
+LATEXMK := latexmk -e '$$clean_ext=q/bbl xdv thm run.xml/' -xelatex -use-make -halt-on-error
 
 all: cable_equation.pdf
 
