@@ -27,6 +27,9 @@
 \newcommand{\Int}[2]{\int_{#1}^{#2}\!}
 \newcommand{\D}{\mathop{}\!d}
 
+\newcommand{\cZ}{\mathcal{Z}}
+\newcommand{\cC}{\mathcal{C}}
+
 \theoremstyle{nonumberplain}
 \newtheorem{lemma*}{Lemma}
 \newenvironment{proof}{\textbf{Proof.}}{\hfill$\square$}
@@ -78,7 +81,7 @@ Letting $\theta(x) = \arctan r'(x)$, the cable equation becomes
 \section{Analytic solutions for $v(x, t)$}
 
 Two important special cases for the cable equation are the cylinder,
-with $r(x)$ constant and $\theta(x)=0$, and the conical frustrum,
+with $r(x)$ constant and $\theta(x)=0$, and the conical frustum,
 with $\theta(x)$ constant and $r(x)=x\tan\theta$.
 
 Given constant electrical properties, as in \eqref{eq:constelec},
@@ -192,7 +195,7 @@ Note that the time derivative $\dot u(x,t)$ can be expressed in terms of Jacobi 
 
 \subsection{The tapered cable}
 
-Consider the cable as a conical frustrum on the interval $[A, B]$ with radius
+Consider the cable as a conical frustum on the interval $[A, B]$ with radius
 $r(x) = x \tan\theta$ and boundary conditions $v'(A, t) = 0$, $v'(B, t) = I$,
 and $v(x, 0) = 0$ (see Figure \ref{fig:tapered}). Reparameterizing gives
 \begin{equation}
@@ -276,21 +279,20 @@ Multiplying by $x$ gives a differential equation of the form
     x^2 g''(x) + 2x g'(x) + \mu x g(x) = 0
 \end{equation}
 for some $\mu$. This has solutions in terms of Bessel functions.
-Following the identity if $C_\nu$
-is a solution to the Bessel equation
+If $\cC_\nu$ is a solution to the Bessel equation
 \begin{equation}
     z^2 f''(z) + z f'(z) - (z^2 - \nu^2) f(z) = 0,
 \end{equation}
-then $g(x) = x^{-\frac{1}{2}}C_1(\alpha x^\frac{1}{2})$ satisfies
+then $g(x) = x^{-\frac{1}{2}}\cC_1(\alpha x^\frac{1}{2})$ satisfies
 \begin{equation}
     \label{eq:besg}
     x^2 g''(x) + 2x g'(x) + \frac{\alpha^2}{4} x g(x) = 0.
 \end{equation}
-Similarly, if $Z_\nu$ is a solution to the modified Bessel equation
+Similarly, if $\cZ_\nu$ is a solution to the modified Bessel equation
 \begin{equation}
     z^2 f''(z) + z f'(z) - (z^2 + \nu^2) f(z) = 0,
 \end{equation}
-then $g(x) = x^{-\frac{1}{2}}Z_1(\alpha x^\frac{1}{2})$ satisfies
+then $g(x) = x^{-\frac{1}{2}}\cZ_1(\alpha x^\frac{1}{2})$ satisfies
 \begin{equation}
     \label{eq:modbesg}
     x^2 g''(x) + 2x g'(x) - \frac{\alpha^2}{4} x g(x) = 0.
@@ -546,9 +548,6 @@ In particular, for a desired $\epsilon>0$,
 
 \section{Identities and integrals for tapered cable eigenfunctions}
 \label{ap:conid}
-
-\newcommand{\cZ}{\mathcal{Z}}
-\newcommand{\cC}{\mathcal{C}}
 
 \newcommand{\Fp}{\smash{F^{\mathrlap{\prime}}}\mkern-2.0mu}
 \newcommand{\Gp}{\smash{G^{\mathrlap{\prime}}}\mkern-2.0mu}
