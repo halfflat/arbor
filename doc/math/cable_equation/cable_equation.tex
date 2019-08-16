@@ -9,6 +9,7 @@
 \usepackage{mathtools}
 \usepackage{ntheorem}
 \usepackage{siunitx}
+
 \usepackage{tikz}
 \usetikzlibrary{angles,calc,intersections,quotes}
 
@@ -39,7 +40,15 @@
 \author{Sam Yates}
 %\date{July 29, 2019}
 
+\sisetup{mode=text}
+
 \begin{document}
+
+% Work-around for siunitx vs newtxmath bug
+\ExplSyntaxOn
+    \cs_undefine:N \c__siunitx_minus_tl
+    \tl_const:Nn \c__siunitx_minus_tl { - }
+\ExplSyntaxOff
 
 \maketitle
 
@@ -86,7 +95,9 @@ with $\theta(x)$ constant and $r(x)=x\tan\theta$.
 
 Given constant electrical properties, as in \eqref{eq:constelec},
 a zero voltage at $t=0$, and Neumann boundary conditions, what
-is $v(x, t)$?
+is $v(x, t)$? The Rallpack 1 model \autocite{bhalla1992} is
+an example of such a passive cable model, and is discussed in
+Appendix \ref{ap:rallpack}.
 
 \subsection{The cylinder}
 
@@ -131,7 +142,8 @@ $\eta(t)=e^{-\lambda t}$ for some $\lambda$ and $\psi$ satisfies
     \label{eq:efncylbc}
     \quad \psi'(0)=\psi'(b)=0.
 \end{gather}
-This is a regular Sturm-Liouville problem with discrete non-negative eigenvalues
+This is a regular Sturm-Liouville problem
+\autocite[see e.g.][Theorem~2.1, p.~146]{reid1980} with discrete non-negative eigenvalues
 $\lambda_k-1$ and corresponding orthogonal eigenfunctions $\psi_k$,
 \begin{equation}
     \langle \psi_k, \psi_{k'} \rangle =
@@ -505,6 +517,48 @@ Taking the difference then gives a solution for $\kappa$,
 
 \newpage
 \appendix
+\section{The Rallpack 1 model}
+\label{ap:rallpack}
+
+The Rallpack suite \autocite{bhalla1992} is a set of three models for the
+validation and benchmarking of cable-based neuron simulators. The first of
+these comprises a cylindrical passive cable of length $L$ and diameter $d$,
+with a constant current applied at $x=0$. The membrane resistive current
+density is given by $J = R_M^{-1}(v-E)$, where $E$ is a fixed reversal potential.
+The values of the electrial and geometric parameters are given in
+Table~\ref{tbl:rallpack1}.
+
+The membrane potential can then be expressed as
+\begin{equation}
+    v(x, t) = E - \lambda I \cdot u(\frac{b-x}{\lambda}, \frac{t}{\tau}),
+\end{equation}
+where
+\begin{equation}
+    \lambda = \sqrt{\frac{R_M d}{4 R_L}},\quad
+    \tau = R_M C_M,
+    b = L/\lambda,
+\end{equation}
+and $u(x,t)$ is given by \eqref{eq:cylseries}.
+
+\begin{table}[htb]
+    \centering
+    \begin{tabular}{lll}
+        \toprule
+	Parameter & {} & {Value} \\
+        \midrule
+	Cable diameter                    & $d$    & \SI{1.0}{\um} \\
+	Cable length                      & $L$    & \SI{1.0}{\mm} \\
+	Axial resistivity                 & $R_A$  & \SI{1.0}{\ohm\m} \\
+	Membrane resistivity              & $R_M$  & \SI{4.0}{\ohm\m\squared} \\
+	Membrane specific capacitance     & $C_M$  & \SI{0.01}{\F\per\m\squared} \\
+	Membrane reversal potential       & $E_M$  & \SI{-65.0}{\mV} \\
+        \bottomrule
+    \end{tabular}
+    \caption{Rallpack 1 parameters}
+    \label{tbl:rallpack1}
+\end{table}
+
+
 \section{Series computation for the voltage on the uniform cylinder}
 \label{ap:cylcomp}
 
