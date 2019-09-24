@@ -37,6 +37,8 @@ public:
     mlocation_list cover(mlocation, bool include_loc=true) const;
 
     mlocation_list minset(const mlocation_list&) const;
+
+    double branch_length(msize_t bid) const { return branch_lengths_.at(bid); }
 };
 
 } // namespace arb
