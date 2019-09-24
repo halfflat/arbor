@@ -2,6 +2,7 @@
 
 #include <arbor/fvm_types.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/morph/primitives.hpp>
 
 #include "util/partition.hpp"
 #include "util/range.hpp"
@@ -22,14 +23,9 @@ struct fvm_policy {
 
 // Discretized cell geometry.
 
-struct mpoint {
-    fvm_size_type branch;
-    fvm_value_type pos;
-};
-
-struct cell_mpoint {
+struct cell_mlocation {
     fvm_index_type cell; // index wrt some vector, not gid.
-    mpoint point;
+    mlocation loc;
 };
 
 struct cv_geometry {
@@ -39,7 +35,7 @@ struct cv_geometry {
     // point in the interal for a given CV is the most proximal end point,
     // while the remainder constitute the distal end points.
 
-    std::vector<mpoint> cv_ends; // boundary point list for CVs.
+    std::vector<mlocation> cv_ends; // boundary point list for CVs.
     std::vector<size_type> cv_ends_divs; // partions cv_ends by CV index on this cell.
 
     // Return CV index (on this cell) containing point.
@@ -159,9 +155,9 @@ struct fvm_layout_config2 {
 
 // Discretization procedures.
 
-fvm_discretization2 fvm_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& params, const fvm_policy&);
+fvm_discretization2 fvm_discretize2(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& params, const fvm_policy&);
 
-fvm_layout_config2 fvm_build_layout(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_discretization2& D);
+//fvm_layout_config2 fvm_build_layout(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_discretization2& D);
 
 
 } // namespace arb
