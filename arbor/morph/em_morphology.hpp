@@ -29,6 +29,7 @@ public:
 
     mlocation sample2loc(msize_t sid) const;
 
+    void assert_valid_location(mlocation) const;
     mlocation canonicalize(mlocation) const;
 
     // Find all locations on the morphology that share the same canonoical
