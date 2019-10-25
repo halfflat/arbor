@@ -3,9 +3,7 @@
 #include <utility>
 #include <vector>
 
-#include <arbor/util/optional.hpp>
 #include <arbor/cable_cell.hpp>
-#include <arbor/cable_cell_param.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/locset.hpp>
 
@@ -15,7 +13,6 @@
 #include "util/span.hpp"
 
 #include "common.hpp"
-#include "unit_test_catalogue.hpp"
 #include "../common_cells.hpp"
 
 using namespace arb;

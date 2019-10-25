@@ -12,6 +12,42 @@
 
 namespace arb {
 
+// (Transitional) CV geometry as determined by per-cell
+// CV boundary points.
+
+struct cv_geometry {
+    // End points for a CV are sorted by mlocation ordering;
+    // the first point will be the proximal end, while the
+    // remainder will be distal.
+
+    using size_type = fvm_size_type;
+
+    std::vector<mlocation> cv_ends;      // CV boundary points, partitioned by CV.
+    std::vector<size_type> cv_ends_divs; // Partitonis cv_ends by CV index on cell.
+
+    std::vector<mcable> cv_cables;       // CV unbranched sections, partitioned by CV.
+    std::vector<size_type> cv_cables_divs; // Partitonis cv_cables by CV index on cell.
+
+    auto end_points(size_type) const {
+        auto partn = util::partition_view(cv_ends_divs);
+        return util::subrange_view(cv_ends, partn[i]);
+    }
+
+    auto cables(size_type) const {
+        auto partn = util::partition_view(cv_cables_divs);
+        return util::subrange_view(cv_cables, partn[i]);
+    }
+
+    size_type size() const {
+        arb_assert(cv_ends_divs.size()==cv_cables_divs.size());
+        arb_assert(cv_ends_divs.size()!=1u);
+
+        return cv_ends_divs.empty()? 0: cv_ends_divs.size()-1;
+    }
+};
+
+cv_geometry cv_geometry_from_ends(const cable_cell&, const locset&);
+
 // Discretization data for an unbranched segment.
 
 struct segment_info {
