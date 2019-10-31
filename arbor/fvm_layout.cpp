@@ -1,4 +1,5 @@
 #include <set>
+#include <stack>
 #include <stdexcept>
 #include <unordered_set>
 #include <vector>
@@ -10,6 +11,7 @@
 #include "algorithms.hpp"
 #include "fvm_compartment.hpp"
 #include "fvm_layout.hpp"
+#include "morph/em_morphology.hpp"
 #include "tree.hpp"
 #include "util/maputil.hpp"
 #include "util/meta.hpp"
@@ -1027,22 +1029,34 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 // Functionality below is in development, and will ultimately replace the interface
 // and implementation above.
 
-static is_terminal(mlocation loc, const em_morphology& em) {
+static bool is_terminal(mlocation loc, const em_morphology& em) {
     return loc.pos==1 && em.branch_children(loc.branch).empty();
 }
 
 cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
+    using std::begin;
+    using std::end;
+    auto pop = [](auto& stack) { auto h = stack.top(); return stack.pop(), h; };
+
     cv_geometry geom;
-    const auto& em = cell.morphology();
+    const auto& em = *cell.morphology();
 
     if (em.empty()) {
         return geom;
     }
 
-    mlocation_list locs = lset.thingify(em);
+    mlocation_list locs = thingify(lset, em);
+
+    // An explicit {0,0} in the requested locations will produce a zero
+    // volume root CV. When the morphology has a single top-level branch,
+    // this will be a trivial CV and should be elided.
+    if (em.branch_children(mnpos).size()==1) {
+        auto is_root = [](const mlocation& loc) { return loc.branch==0 && loc.pos==0; };
+        locs.erase(begin(locs), std::find_if_not(begin(locs), end(locs), is_root));
+    }
 
     std::stack<mlocation> heads;
-    heads.push_back(mlocation{0, 0});
+    heads.push({mnpos, 0});
 
     mlocation_list ends;
     mcable_list cables;
@@ -1051,62 +1065,61 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
     geom.cv_cables_divs = {0u};
 
     while (!heads.empty()) {
-        mlocation h = heads.top();
-        heads.pop();
+        mlocation h = pop(heads);
 
         cables.clear();
-        ends = {h};
+        ends.clear();
 
-        if (is_terminal(h, rm)) {
+        if (is_terminal(h, em)) {
             continue;
         }
 
-        // (Note: upper_bound is used here in order to avoid creating any trivial,
-        // non-branching CVs.)
-        auto it = std::upper_bound(locs.begin(), locs.end(), {h.branch, h.prox_pos});
-        if (it!=locs.end() && it->branch==h.branch) {
-            // CV comprises non-empty cable section.
-            cables.push_back({h.branch, h.prox_pos, it->pos});
-            ends.push_back(*it);
-        }
-        else {
-            std::stack<msize_t> branches;
+        std::stack<msize_t> branches;
+        branches.push(h.branch);
 
-            auto push_branch_children = [&](msize_t b, double prox) {
-                cables.push_back({b, prox, 1.});
-                if (em.branch_children(b).empty()) {
-                    ends.push_back({b, 1});
-                }
-                else {
-                    for (auto& c: em.branch_children(b)) {
-                        branches.push_back(c);
+        while (!branches.empty()) {
+            msize_t b = pop(branches);
+
+            // Find most proximal point in locs on this branch, strictly more distal than h.
+            auto it = locs.end();
+            if (b!=mnpos && b==h.branch) {
+                it = std::upper_bound(locs.begin(), locs.end(), h);
+            }
+            else if (b!=mnpos) {
+                it = std::lower_bound(locs.begin(), locs.end(), mlocation{b, 0});
+            }
+
+            // If found, use as an end point, and stop descent.
+            // Otherwise, recurse over child branches.
+            if (it!=locs.end() && it->branch==b) {
+                cables.push_back({b, b==h.branch? h.pos: 0, it->pos});
+                ends.push_back(*it);
+                heads.push(*it);
+            }
+            else {
+                if (b!=mnpos) {
+                    cables.push_back({b, b==h.branch? h.pos: 0, 1});
+                    if (em.branch_children(b).empty()) {
+                        ends.push_back({b, 1});
                     }
                 }
-            };
-
-            push_branch_children(h.branch, h.prox_pos);
-            while (!branches.empty()) {
-                mcable b = branches.top();
-                branches.pop();
-
-                auto it = std::lower_bound(locs.begin(), locs.end(), {b, 0});
-                if (it==locs.end()) {
-                    push_branch_children(b, 0.);
-                }
-                else {
-                    cables.push_back({b, 0, it->pos});
-                    ends.push_back({b, it->pos});
-                    heads.push_back(ends.back());
+                for (auto& c: em.branch_children(b)) {
+                    branches.push(c);
                 }
             }
         }
 
-        util::append(geom.cv_ends, ends);
+        geom.cv_ends.push_back(h);
+        util::sort(ends);
+        util::append(geom.cv_ends, std::move(ends));
         geom.cv_ends_divs.push_back(geom.cv_ends.size());
 
-        util::append(geom.cv_cables, cables);
+        util::sort(cables);
+        util::append(geom.cv_cables, std::move(cables));
         geom.cv_cables_divs.push_back(geom.cv_cables.size());
     }
+
+    return geom;
 }
 
 } // namespace arb

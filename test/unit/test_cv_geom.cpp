@@ -1,3 +1,5 @@
+#include <utility>
+
 #include <arbor/util/optional.hpp>
 #include <arbor/cable_cell.hpp>
 #include <arbor/morph/morphology.hpp>
@@ -10,6 +12,7 @@
 #include "../common_cells.hpp"
 
 using namespace arb;
+using util::make_span;
 
 // TODO: factor out test morphologies from this and test_cv_policy.
 
@@ -43,7 +46,7 @@ namespace {
 }
 
 TEST(cv_layout, empty) {
-    cable_cell empty_cell = make_cable_cell(m_empty);
+    cable_cell empty_cell{m_empty};
     cv_geometry geom = cv_geometry_from_ends(empty_cell, ls::nil());
 
     EXPECT_TRUE(geom.cv_ends.empty());
@@ -53,25 +56,36 @@ TEST(cv_layout, empty) {
 }
 
 TEST(cv_layout, trivial) {
-    for (auto& morph: {m_sph_b1, m_reg_b1, m_sph_b6, m_mlt_b6}) {
-        cable_cell cell = make_cable_cell(morph);
+    std::pair<const char*, morphology> cases[] = {
+        {"m_sph_b1", m_sph_b1}, {"m_reg_b1", m_reg_b1}, {"m_sph_b6", m_sph_b6}, {"m_mlt_b6", m_mlt_b6}
+    };
+    for (auto& p: cases) {
+        SCOPED_TRACE(p.first);
+        cable_cell cell{p.second};
+        auto em = *cell.morphology();
 
-        // Four equivalent ways of specifying one CV comprising whole cell:
-        cv_geometry geom1 = cv_geometry_from_ends(empty_cell, ls::nul());
-        cv_geometry geom2 = cv_geometry_from_ends(empty_cell, ls::root());
-        cv_geometry geom3 = cv_geometry_from_ends(empty_cell, ls::terminal());
-        cv_geometry geom4 = cv_geometry_from_ends(empty_cell, join(ls::root(), ls::terminal());
-
-        EXPECT_EQ(geom1.cv_cables(), geom2.cv_cables());
-        EXPECT_EQ(geom1.cv_cables(), geom3.cv_cables());
-        EXPECT_EQ(geom1.cv_cables(), geom4.cv_cables());
+        // Equivalent ways of specifying one CV comprising whole cell:
+        cv_geometry geom1 = cv_geometry_from_ends(cell, ls::nil());
+        cv_geometry geom2 = cv_geometry_from_ends(cell, ls::terminal());
 
         EXPECT_EQ(1u, geom1.size());
+        EXPECT_EQ(geom1.cv_cables, geom2.cv_cables);
 
-        mlocation_list root_and_terminals = join(ls::root(), ls::terminal()).thingify(cell.morphology());
-        EXPECT_EQ(root_and_terminals, geom1.end_points(0));
+        // These are equivalent too, if there is a single root branch.
+        cv_geometry geom3 = cv_geometry_from_ends(cell, ls::root());
+        cv_geometry geom4 = cv_geometry_from_ends(cell, join(ls::root(), ls::terminal()));
 
-        mcable_list all_cables = reg::all().thingify(cell.morphology());
-        EXPECT_EQ(all_cables, geom1.cables(0));
+        EXPECT_EQ(geom3.cv_cables, geom4.cv_cables);
+        if (em.branch_children(mnpos).size()==1) {
+            EXPECT_EQ(geom1.cv_cables, geom4.cv_cables);
+        }
+
+        std::vector<mlocation> expected_end_points = {{mnpos, 0}};
+        util::append(expected_end_points, thingify(ls::terminal(), em));
+
+        EXPECT_TRUE(testing::seq_eq(expected_end_points, geom1.end_points(0)));
+
+        mcable_list all_cables = thingify(reg::all(), em);
+        EXPECT_TRUE(testing::seq_eq(all_cables, geom1.cables(0)));
     }
 }

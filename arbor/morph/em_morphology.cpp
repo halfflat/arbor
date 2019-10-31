@@ -75,6 +75,11 @@ em_morphology::em_morphology(const morphology& m):
             forks_.push_back(sample2loc(i));
         }
     }
+    // Special case for single branch, spherical soma:
+    // terminal point {0,1} does not correspond to a sample point.
+    if (morph_.spherical_root() && samples.size()==1) {
+        terminals_.push_back({0, 1});
+    }
 }
 
 em_morphology::em_morphology():

@@ -28,12 +28,12 @@ struct cv_geometry {
     std::vector<mcable> cv_cables;       // CV unbranched sections, partitioned by CV.
     std::vector<size_type> cv_cables_divs; // Partitonis cv_cables by CV index on cell.
 
-    auto end_points(size_type) const {
+    auto end_points(size_type i) const {
         auto partn = util::partition_view(cv_ends_divs);
         return util::subrange_view(cv_ends, partn[i]);
     }
 
-    auto cables(size_type) const {
+    auto cables(size_type i) const {
         auto partn = util::partition_view(cv_cables_divs);
         return util::subrange_view(cv_cables, partn[i]);
     }
