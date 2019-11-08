@@ -1,6 +1,8 @@
+#include <functional>
 #include <set>
 #include <stack>
 #include <stdexcept>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -1029,10 +1031,141 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 // Functionality below is in development, and will ultimately replace the interface
 // and implementation above.
 
+#if 0
 static bool is_terminal(mlocation loc, const em_morphology& em) {
     return loc.pos==1 && em.branch_children(loc.branch).empty();
 }
+#endif
 
+// Define CVs by the regions delimited by the given points in the locset, with
+// the following semantics:
+//
+//     1. Elide any trivial (zero-extent) CVs that arise from the given
+//        boundary points.
+//
+//     2. Whenever two or more CVs have a common most-proximal point on the
+//        tree, insert a trivial CV at that point to handle the corresponding
+//        linear dependency.
+//
+// Trivial CVs are represented by a single 0-length mcable (branch, 1, 1).
+
+cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
+    struct mloc_hash {
+        std::size_t operator()(const mlocation& loc) const { return loc.branch ^ std::hash<double>()(loc.pos); }
+    };
+    using mlocation_map = std::unordered_map<mlocation, fvm_size_type, mloc_hash>;
+    auto pop = [](auto& vec) { auto h = vec.back(); return vec.pop_back(), h; };
+
+    cv_geometry geom;
+    const auto& em = *cell.morphology();
+
+    if (em.empty()) {
+        return geom;
+    }
+
+    auto canonical = [&em](mlocation loc) { return em.canonicalize(loc); };
+    auto origin =    [&canonical](mcable cab) { return canonical(mlocation{cab.branch, cab.prox_pos}); };
+    auto terminus =  [&canonical](mcable cab) { return canonical(mlocation{cab.branch, cab.dist_pos}); };
+
+    mlocation_list locs = thingify(lset, em);
+
+    std::vector<msize_t> n_cv_cables;
+    std::vector<mlocation> next_cv_head;
+    next_cv_head.push_back({mnpos, 0});
+
+    mcable_list cables, all_cables;
+    mlocation_list ends;
+    std::vector<msize_t> branches;
+
+    mlocation_map head_count;
+    unsigned extra_cv_count;
+
+    while (!next_cv_head.empty()) {
+        mlocation h = pop(next_cv_head);
+        if (++head_count[em.canonicalize(h)]==2) {
+            ++extra_cv_count;
+        }
+
+        cables.clear();
+        branches.clear();
+        branches.push_back(h.branch);
+
+        while (!branches.empty()) {
+            msize_t b = pop(branches);
+
+            // Find most proximal point in locs on this branch, strictly more distal than h.
+            auto it = locs.end();
+            if (b!=mnpos && b==h.branch) {
+                it = std::upper_bound(locs.begin(), locs.end(), h);
+            }
+            else if (b!=mnpos) {
+                it = std::lower_bound(locs.begin(), locs.end(), mlocation{b, 0});
+            }
+
+            // If found, use as an end point, and stop descent.
+            // Otherwise, recurse over child branches.
+            if (it!=locs.end() && it->branch==b) {
+                cables.push_back({b, b==h.branch? h.pos: 0, it->pos});
+                next_cv_head.push_back(*it);
+            }
+            else {
+                if (b!=mnpos) {
+                    cables.push_back({b, b==h.branch? h.pos: 0, 1});
+                }
+                for (auto& c: em.branch_children(b)) {
+                    branches.push_back(c);
+                }
+            }
+        }
+
+        n_cv_cables.push_back(cables.size());
+        util::sort(cables);
+        util::append(all_cables, std::move(cables));
+    }
+
+    geom.cv_cables.reserve(all_cables.size()+extra_cv_count);
+    geom.cv_parent.reserve(n_cv_cables.size()+extra_cv_count);
+    geom.cv_cables_divs.reserve(n_cv_cables.size()+extra_cv_count+1);
+    geom.cv_cables_divs.push_back(0);
+
+    mlocation_map parent_map;
+
+    unsigned all_cables_index = 0;
+    unsigned cv_index = 0;
+    for (auto n_cables: n_cv_cables) {
+        mlocation head = origin(all_cables[all_cables_index]);
+        msize_t parent_cv = value_by_key(parent_map, head).value_or(mnpos);
+
+        auto cables = util::subrange_view(all_cables, all_cables_index, all_cables_index+n_cables);
+        std::copy(cables.begin(), cables.end(), std::back_inserter(geom.cv_cables));
+
+        geom.cv_parent.push_back(parent_cv);
+        geom.cv_cables_divs.push_back(geom.cv_cables.size());
+
+        auto this_cv = cv_index++;
+        for (auto cable: cables) {
+            mlocation term = terminus(cable);
+
+            unsigned n_children = value_by_key(head_count, term).value_or(0);
+            if (n_children>1) {
+                // Add trivial CV for lindep.
+                geom.cv_parent.push_back(this_cv);
+                geom.cv_cables.push_back(mcable{cable.branch, 1., 1.});
+                geom.cv_cables_divs.push_back(geom.cv_cables.size());
+                parent_map[term] = cv_index++;
+            }
+            else {
+                parent_map[term] = this_cv;
+            }
+        }
+
+        all_cables_index += n_cables;
+    }
+
+    return geom;
+}
+
+#if 0
 cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
     using std::begin;
     using std::end;
@@ -1121,5 +1254,6 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
 
     return geom;
 }
+#endif
 
 } // namespace arb

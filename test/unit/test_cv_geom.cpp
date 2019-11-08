@@ -49,10 +49,10 @@ TEST(cv_layout, empty) {
     cable_cell empty_cell{m_empty};
     cv_geometry geom = cv_geometry_from_ends(empty_cell, ls::nil());
 
-    EXPECT_TRUE(geom.cv_ends.empty());
-    EXPECT_TRUE(geom.cv_ends_divs.empty());
+    EXPECT_TRUE(geom.cv_parent.empty());
     EXPECT_TRUE(geom.cv_cables.empty());
     EXPECT_TRUE(geom.cv_cables_divs.empty());
+    EXPECT_EQ(0u, geom.size());
 }
 
 TEST(cv_layout, trivial) {
@@ -80,12 +80,18 @@ TEST(cv_layout, trivial) {
             EXPECT_EQ(geom1.cv_cables, geom4.cv_cables);
         }
 
-        std::vector<mlocation> expected_end_points = {{mnpos, 0}};
-        util::append(expected_end_points, thingify(ls::terminal(), em));
-
-        EXPECT_TRUE(testing::seq_eq(expected_end_points, geom1.end_points(0)));
-
         mcable_list all_cables = thingify(reg::all(), em);
         EXPECT_TRUE(testing::seq_eq(all_cables, geom1.cables(0)));
     }
 }
+
+#if 0
+TEST(cv_layout, branch_handling) {
+    // CVs with differing treatments of a fork point with 3 children (branches 2, 3, 4 and 5 in m_sph_b6):
+    // a) Four CVs: one per branch and a zero-volume CV at fork.
+    // b) Two CVs: one covering branches 2 and 4; the second covering branches 3 and 5.
+    // In addition there will be a single CV for the root branch and branch 1.
+
+    using L = mlocation;
+    locset case_a = as_locset(L{1, 1}, L{2, 0}, L{2, 1}, L{3,0}, L{4, 0}, L{4, 0}, L
+#endif

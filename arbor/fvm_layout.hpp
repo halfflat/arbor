@@ -22,16 +22,9 @@ struct cv_geometry {
 
     using size_type = fvm_size_type;
 
-    std::vector<mlocation> cv_ends;      // CV boundary points, partitioned by CV.
-    std::vector<size_type> cv_ends_divs; // Partitonis cv_ends by CV index on cell.
-
-    std::vector<mcable> cv_cables;       // CV unbranched sections, partitioned by CV.
-    std::vector<size_type> cv_cables_divs; // Partitonis cv_cables by CV index on cell.
-
-    auto end_points(size_type i) const {
-        auto partn = util::partition_view(cv_ends_divs);
-        return util::subrange_view(cv_ends, partn[i]);
-    }
+    std::vector<mcable> cv_cables;         // CV unbranched sections, partitioned by CV.
+    std::vector<size_type> cv_cables_divs; // Partitions cv_cables by CV index on cell.
+    std::vector<size_type> cv_parent;      // Index of CV parent or size_type(-1) for root.
 
     auto cables(size_type i) const {
         auto partn = util::partition_view(cv_cables_divs);
@@ -39,10 +32,10 @@ struct cv_geometry {
     }
 
     size_type size() const {
-        arb_assert(cv_ends_divs.size()==cv_cables_divs.size());
-        arb_assert(cv_ends_divs.size()!=1u);
+        arb_assert((cv_parent.empty() && cv_cables_divs.empty()) ||
+                   (cv_parent.size()+1 == cv_cables_divs.size()));
 
-        return cv_ends_divs.empty()? 0: cv_ends_divs.size()-1;
+        return cv_parent.size();
     }
 };
 

@@ -32,7 +32,7 @@ public:
     auto num_branches() const { return morph_.num_branches(); }
     auto num_samples() const { return morph_.num_samples(); }
     auto branch_parent(msize_t b) const { return morph_.branch_parent(b); }
-    auto branch_children(msize_t b) const { return morph_.branch_children(b); }
+    decltype(auto) branch_children(msize_t b) const { return morph_.branch_children(b); }
 
     // Access to computed and cached data:
 
