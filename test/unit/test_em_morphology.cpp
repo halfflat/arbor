@@ -385,6 +385,39 @@ TEST(locset, thingify) {
     }
 }
 
+TEST(locset, thingify_on_branches) {
+    // Same sample tree as in locset.thingify test.
+
+    using pvec = std::vector<arb::msize_t>;
+    using svec = std::vector<arb::msample>;
+
+    pvec parents = {arb::mnpos, 0, 1, 0, 3, 4, 4, 6};
+    svec samples = {
+        {{  0,  0,  0,  2}, 3},
+        {{ 10,  0,  0,  2}, 3},
+        {{100,  0,  0,  2}, 3},
+        {{  0, 10,  0,  2}, 3},
+        {{  0,100,  0,  2}, 3},
+        {{100,100,  0,  2}, 3},
+        {{  0,200,  0,  2}, 3},
+        {{  0,300,  0,  2}, 3},
+    };
+    arb::sample_tree sm(samples, parents);
+    arb::em_morphology em(arb::morphology(sm, true));
+
+    using arb::ls::on_branches;
+    using ll = arb::mlocation_list;
+
+    ll branch_0 = thingify(on_branches(0), em);
+    EXPECT_EQ(branch_0, (ll{{0, 0}, {1, 0}, {2, 0}, {3, 0}, {4, 0}}));
+
+    ll branch_0_3 = thingify(on_branches(0.3), em);
+    EXPECT_EQ(branch_0_3, (ll{{0, 0.3}, {1, 0.3}, {2, 0.3}, {3, 0.3}, {4, 0.3}}));
+
+    ll branch_1 = thingify(on_branches(1), em);
+    EXPECT_EQ(branch_1, (ll{{0, 1}, {1, 1}, {2, 1}, {3, 1}, {4, 1}}));
+}
+
 // Forward declare implementation of join, union & intersect on location lists
 // for testing.
 namespace arb { namespace ls {

@@ -21,6 +21,8 @@
 #include "util/rangeutil.hpp"
 #include "util/transform.hpp"
 
+#include <iostream>
+
 namespace arb {
 
 using util::count_along;
@@ -1078,13 +1080,10 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
     std::vector<msize_t> branches;
 
     mlocation_map head_count;
-    unsigned extra_cv_count;
+    unsigned extra_cv_count = 0;
 
     while (!next_cv_head.empty()) {
         mlocation h = pop(next_cv_head);
-        if (++head_count[em.canonicalize(h)]==2) {
-            ++extra_cv_count;
-        }
 
         cables.clear();
         branches.clear();
@@ -1118,9 +1117,18 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
             }
         }
 
-        n_cv_cables.push_back(cables.size());
-        util::sort(cables);
-        util::append(all_cables, std::move(cables));
+        auto empty_cable = [](mcable c) { return c.prox_pos==c.dist_pos; };
+        cables.erase(std::remove_if(cables.begin(), cables.end(), empty_cable), cables.end());
+
+        if (!cables.empty()) {
+            if (++head_count[origin(cables.front())]==2) {
+                ++extra_cv_count;
+            }
+
+            n_cv_cables.push_back(cables.size());
+            util::sort(cables);
+            util::append(all_cables, std::move(cables));
+        }
     }
 
     geom.cv_cables.reserve(all_cables.size()+extra_cv_count);
@@ -1132,6 +1140,18 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
 
     unsigned all_cables_index = 0;
     unsigned cv_index = 0;
+
+    // Multiple CVs meeting at (0,0)?
+    mlocation root{0, 0};
+    unsigned n_top_children = value_by_key(head_count, root).value_or(0);
+    if (n_top_children>1) {
+        // Add initial trical CV.
+        geom.cv_parent.push_back(mnpos);
+        geom.cv_cables.push_back(mcable{0, 0, 0});
+        geom.cv_cables_divs.push_back(geom.cv_cables.size());
+        parent_map[root] = cv_index++;
+    }
+
     for (auto n_cables: n_cv_cables) {
         mlocation head = origin(all_cables[all_cables_index]);
         msize_t parent_cv = value_by_key(parent_map, head).value_or(mnpos);

@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <utility>
 
 #include <arbor/util/optional.hpp>
@@ -9,43 +10,15 @@
 #include "fvm_layout.hpp"
 
 #include "common.hpp"
+#include "common_morphologies.hpp"
 #include "../common_cells.hpp"
 
 using namespace arb;
 using util::make_span;
 
-// TODO: factor out test morphologies from this and test_cv_policy.
-
-namespace {
-    std::vector<msample> make_samples(unsigned n) {
-        std::vector<msample> ms;
-        for (auto i: make_span(n)) ms.push_back({{0., 0., (double)i, 0.5}, 5});
-        return ms;
-    }
-
-    // Test morphologies for CV determination:
-    // Samples points have radius 0.5, giving an initial branch length of 1.0
-    // for morphologies with spherical roots.
-
-    const morphology m_empty;
-
-    // spherical root, one branch
-    const morphology m_sph_b1{sample_tree(make_samples(1), {mnpos}), true};
-
-    // regular root, one branch
-    const morphology m_reg_b1{sample_tree(make_samples(2), {mnpos, 0u}), false};
-
-    // spherical root, six branches
-    const morphology m_sph_b6{sample_tree(make_samples(8), {mnpos, 0u, 1u, 0u, 3u, 4u, 4u, 4u}), true};
-
-    // regular root, six branches
-    const morphology m_reg_b6{sample_tree(make_samples(7), {mnpos, 0u, 1u, 1u, 2u, 2u, 2u}), false};
-
-    // regular root, six branches, mutiple top level branches.
-    const morphology m_mlt_b6{sample_tree(make_samples(7), {mnpos, 0u, 1u, 1u, 0u, 4u, 4u}), false};
-}
-
 TEST(cv_layout, empty) {
+    using namespace common_morphology;
+
     cable_cell empty_cell{m_empty};
     cv_geometry geom = cv_geometry_from_ends(empty_cell, ls::nil());
 
@@ -56,13 +29,15 @@ TEST(cv_layout, empty) {
 }
 
 TEST(cv_layout, trivial) {
-    std::pair<const char*, morphology> cases[] = {
-        {"m_sph_b1", m_sph_b1}, {"m_reg_b1", m_reg_b1}, {"m_sph_b6", m_sph_b6}, {"m_mlt_b6", m_mlt_b6}
-    };
-    for (auto& p: cases) {
+    using namespace common_morphology;
+
+    for (auto& p: test_morphologies) {
+        if (p.second.empty()) continue;
+
         SCOPED_TRACE(p.first);
         cable_cell cell{p.second};
         auto em = *cell.morphology();
+
 
         // Equivalent ways of specifying one CV comprising whole cell:
         cv_geometry geom1 = cv_geometry_from_ends(cell, ls::nil());
@@ -82,6 +57,49 @@ TEST(cv_layout, trivial) {
 
         mcable_list all_cables = thingify(reg::all(), em);
         EXPECT_TRUE(testing::seq_eq(all_cables, geom1.cables(0)));
+    }
+}
+
+TEST(cv_layout, one_cv_per_branch) {
+    using namespace common_morphology;
+
+    for (auto& p: test_morphologies) {
+        if (p.second.empty()) continue;
+
+        SCOPED_TRACE(p.first);
+        cable_cell cell{p.second};
+        auto em = *cell.morphology();
+
+        cv_geometry geom = cv_geometry_from_ends(cell, ls::on_branches(0));
+
+        // Expect trivial CVs at every fork point, and single-cable CVs for each branch.
+        std::vector<unsigned> seen_branches(em.num_branches(), 0);
+        auto n_branch_child = [&em](msize_t b) { return em.branch_children(b).size(); };
+        for (auto i: make_span(geom.size())) {
+            auto cables = geom.cables(i);
+
+            ASSERT_EQ(1u, cables.size());
+            auto c = cables.front();
+
+            if (c.prox_pos==c.dist_pos) {
+                if (c.branch==0) {
+                    EXPECT_EQ(0., c.prox_pos);
+                    EXPECT_TRUE(n_branch_child(mnpos)>1);
+                }
+                else {
+                    EXPECT_EQ(1., c.prox_pos);
+                    EXPECT_TRUE(n_branch_child(c.branch)>1);
+                }
+            }
+            else {
+                ++seen_branches[c.branch];
+                EXPECT_EQ(1., seen_branches[c.branch]);
+                EXPECT_EQ(0., c.prox_pos);
+                EXPECT_EQ(1., c.dist_pos);
+            }
+        }
+
+        EXPECT_TRUE(std::find(seen_branches.begin(), seen_branches.end(), 0)==seen_branches.end());
     }
 }
 

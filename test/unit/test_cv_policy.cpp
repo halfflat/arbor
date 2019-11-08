@@ -13,52 +13,29 @@
 #include "util/span.hpp"
 
 #include "common.hpp"
+#include "common_morphologies.hpp"
 #include "../common_cells.hpp"
 
 using namespace arb;
+using namespace common_morphology;
 using util::make_span;
 
 namespace {
-    std::vector<msample> make_samples(unsigned n) {
-        std::vector<msample> ms;
-        for (auto i: make_span(n)) ms.push_back({{0., 0., (double)i, 0.5}, 5});
-        return ms;
-    }
 
-    // Test morphologies for CV determination:
-    // Samples points have radius 0.5, giving an initial branch length of 1.0
-    // for morphologies with spherical roots.
-
-    const morphology m_empty;
-
-    // spherical root, one branch
-    const morphology m_sph_b1{sample_tree(make_samples(1), {mnpos}), true};
-
-    // regular root, one branch
-    const morphology m_reg_b1{sample_tree(make_samples(2), {mnpos, 0u}), false};
-
-    // spherical root, six branches
-    const morphology m_sph_b6{sample_tree(make_samples(8), {mnpos, 0u, 1u, 0u, 3u, 4u, 4u, 4u}), true};
-
-    // regular root, six branches
-    const morphology m_reg_b6{sample_tree(make_samples(7), {mnpos, 0u, 1u, 1u, 2u, 2u, 2u}), false};
-
-    // regular root, six branches, mutiple top level branches.
-    const morphology m_mlt_b6{sample_tree(make_samples(7), {mnpos, 0u, 1u, 1u, 0u, 4u, 4u}), false};
-
-    template <typename... A>
-    locset as_locset(mlocation head, A... tail) {
-        return join(ls::location(head), ls::location(tail)...);
-    }
-
-    template <typename Seq>
-    locset as_locset(const Seq& seq) {
-        using std::begin;
-        using std::end;
-        return std::accumulate(begin(seq), end(seq), ls::nil(),
-            [](locset ls, const mlocation& p) { return join(std::move(ls), ls::location(p)); });
-    }
+template <typename... A>
+locset as_locset(mlocation head, A... tail) {
+    return join(ls::location(head), ls::location(tail)...);
 }
+
+template <typename Seq>
+locset as_locset(const Seq& seq) {
+    using std::begin;
+    using std::end;
+    return std::accumulate(begin(seq), end(seq), ls::nil(),
+        [](locset ls, const mlocation& p) { return join(std::move(ls), ls::location(p)); });
+}
+
+} // anonymous namespace
 
 TEST(cv_policy, explicit_policy) {
     using L = mlocation;
