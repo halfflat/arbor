@@ -100,6 +100,19 @@ TEST(cv_layout, one_cv_per_branch) {
                 EXPECT_EQ(1., seen_branches[c.branch]);
                 EXPECT_EQ(0., c.prox_pos);
                 EXPECT_EQ(1., c.dist_pos);
+
+                // Confirm parent CV is fork CV:
+                if (i>0) {
+                    mlocation pfork = em.canonicalize(mlocation{c.branch, 0.});
+
+                    auto pcables = geom.cables(geom.cv_parent[i]);
+                    ASSERT_EQ(1u, pcables.size());
+
+                    mcable p = pcables.front();
+                    EXPECT_EQ(pfork.branch, p.branch);
+                    EXPECT_EQ(1., p.prox_pos);
+                    EXPECT_EQ(1., p.dist_pos);
+                }
             }
         }
 
