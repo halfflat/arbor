@@ -8,6 +8,7 @@
 #include <arbor/recipe.hpp>
 
 #include "fvm_compartment.hpp"
+#include "util/rangeutil.hpp"
 #include "util/span.hpp"
 
 namespace arb {
@@ -21,25 +22,46 @@ struct cv_geometry {
     // remainder will be distal.
 
     using size_type = fvm_size_type;
+    using index_type = fvm_index_type;
 
-    std::vector<mcable> cv_cables;         // CV unbranched sections, partitioned by CV.
-    std::vector<size_type> cv_cables_divs; // Partitions cv_cables by CV index on cell.
-    std::vector<size_type> cv_parent;      // Index of CV parent or size_type(-1) for root.
+    std::vector<mcable> cv_cables;           // CV unbranched sections, partitioned by CV.
+    std::vector<size_type> cv_cables_divs;   // Partitions cv_cables by CV index.
+    std::vector<index_type> cv_parent;       // Index of CV parent or size_type(-1) for a cell root CV.
 
-    auto cables(size_type i) const {
+    std::vector<index_type> cv_to_cell;      // Maps CV index to cell index.
+    std::vector<size_type> cell_cv_divs;     // Partitions CV indices by cell.
+
+    auto cables(size_type cv_index) const {
         auto partn = util::partition_view(cv_cables_divs);
-        return util::subrange_view(cv_cables, partn[i]);
+        return util::subrange_view(cv_cables, partn[cv_index]);
+    }
+
+    auto cv_span(size_type cell_idx) const {
+        auto partn = util::partition_view(cell_cv_divs);
+        return util::make_span(cell_cv_bounds, partn[c_index]);
     }
 
     size_type size() const {
         arb_assert((cv_parent.empty() && cv_cables_divs.empty()) ||
-                   (cv_parent.size()+1 == cv_cables_divs.size()));
+                   (cv_parent.size()+1 == cv_cables_divs.size() &&
+                    cv_parent.size() == cv_to_cell.size() &&
+                    cv_to_cell.back()+1 == cell_cv_divs.size()));
 
         return cv_parent.size();
     }
+
+    bool empty() const {
+        return size()==0;
+    }
+
+    size_type n_cell() const {
+        return empty()? 0: 1+cv_to_cell.back();
+    }
 };
 
-cv_geometry cv_geometry_from_ends(const cable_cell&, const locset&);
+// Combine two cv_geometry groups in-place.
+cv_geometry& append(cv_geometry&, const cv_geometry&);
+
 
 // Discretization data for an unbranched segment.
 
