@@ -38,7 +38,7 @@ struct cv_geometry {
 
     auto cv_span(size_type cell_idx) const {
         auto partn = util::partition_view(cell_cv_divs);
-        return util::make_span(cell_cv_bounds, partn[c_index]);
+        return util::make_span(partn[cell_idx]);
     }
 
     size_type size() const {
@@ -62,6 +62,8 @@ struct cv_geometry {
 // Combine two cv_geometry groups in-place.
 cv_geometry& append(cv_geometry&, const cv_geometry&);
 
+// Construct cv_geometry from locset describing boundaries.
+cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset);
 
 // Discretization data for an unbranched segment.
 

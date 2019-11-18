@@ -110,8 +110,14 @@ TEST(cv_layout, one_cv_per_branch) {
 
                     mcable p = pcables.front();
                     EXPECT_EQ(pfork.branch, p.branch);
-                    EXPECT_EQ(1., p.prox_pos);
-                    EXPECT_EQ(1., p.dist_pos);
+                    EXPECT_EQ(p.prox_pos, p.dist_pos);
+
+                    if (p.branch==0) {
+                        EXPECT_TRUE(p.prox_pos==0 || p.prox_pos==1);
+                    }
+                    else {
+                        EXPECT_EQ(1., p.prox_pos);
+                    }
                 }
             }
         }

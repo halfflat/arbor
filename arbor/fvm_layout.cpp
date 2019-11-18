@@ -1197,7 +1197,7 @@ namespace impl {
     using std::next;
 
     template <typename Seq>
-    void tail(Seq& seq) { return util::range(next(begin(seq)), end(seq)); };
+    auto tail(Seq& seq) { return util::make_range(next(begin(seq)), end(seq)); };
 
     template <typename Container, typename Offset, typename Seq>
     void append_offset(Container& ctr, const Offset& offset, const Seq& rhs) {
@@ -1207,24 +1207,22 @@ namespace impl {
     }
 }
 
-using impl::tail;
-using impl::append_offset;
-
-cv_geometry& append(cv_geometry& geom, const cv_geometry& tail) {
+cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     using util::append;
-    using impl::tail
+    using impl::tail;
     using impl::append_offset;
 
-    using append_divs = [](auto& left, const auto& right) {
+    auto append_divs = [](auto& left, const auto& right) {
         append_offset(left, left.back(), tail(right));
     };
 
     append(geom.cv_cables, right.cv_cables);
-    append_divs(geom.cv_cables_divs, right.geom_cv_cables_divs);
+    append_divs(geom.cv_cables_divs, right.cv_cables_divs);
 
     append_offset(geom.cv_parent, geom.size(), right.cv_parent);
     append_offset(geom.cv_to_cell, geom.n_cell(), right.cv_to_cell);
     append_divs(geom.cell_cv_divs, right.cell_cv_divs);
+    return geom;
 }
 
 } // namespace arb
