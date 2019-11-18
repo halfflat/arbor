@@ -131,7 +131,8 @@ struct pw_elements {
 // keeping othewise the same interface.
 
 template <> struct pw_elements<void> {
-    using size_type = unsigned;
+    using size_type = pw_size_type;
+    static constexpr size_type npos = pw_npos;
 
     std::vector<double> vertex_;
 
@@ -142,6 +143,16 @@ template <> struct pw_elements<void> {
 
     size_type size() const { return vertex_.empty()? 0: vertex_.size()-1; }
     bool empty() const { return vertex_.empty(); }
+
+    const auto& vertices() const { return vertex_; }
+
+    size_type index_of(double x) {
+        if (empty()) return npos;
+
+        auto partn = intervals();
+        if (x == partn.bounds().second) return size()-1;
+        else return partn.index(x);
+    }
 
     void reserve(size_type n) { vertex_.reserve(n+1); }
     void clear() { vertex_.clear(); }
