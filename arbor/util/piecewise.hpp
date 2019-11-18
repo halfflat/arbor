@@ -127,40 +127,6 @@ struct pw_elements {
     }
 };
 
-namespace impl {
-    template <typename P, typename Seq>
-    void generic_vertices_assign(P& p, const Seq& vertices) {
-        using std::begin;
-        using std::end;
-
-        auto vi = begin(vertices);
-        auto ve = end(vertices);
-
-        if (vi==ve) {
-            p.clear();
-            return;
-        }
-
-        double left = *vi++;
-        if (vi==ve) {
-            throw std::runtime_error("vertex list too short");
-        }
-
-        double right = *vi++;
-        p. push_back(left, right);
-
-        while (vi!=ve) {
-            double right = *vi++;
-            p.push_back(left, right);
-        }
-
-        while (vi!=ve) {
-            double right = *vi++;
-            p.push_back(right);
-        }
-    }
-}
-
 // With X = void, present the element intervals only,
 // keeping othewise the same interface.
 
@@ -171,6 +137,8 @@ template <> struct pw_elements<void> {
 
     auto intervals() const { return util::partition_view(vertex_); }
     auto interval(size_type i) const { return intervals()[i]; }
+
+    auto bounds() const { return intervals().bounds(); }
 
     size_type size() const { return vertex_.empty()? 0: vertex_.size()-1; }
     bool empty() const { return vertex_.empty(); }
@@ -200,9 +168,131 @@ template <> struct pw_elements<void> {
 
     template <typename Seq1>
     void assign(const Seq1& vertices) {
-        impl::generic_vertices_assign(*this, vertices);
+        using std::begin;
+        using std::end;
+
+        auto vi = begin(vertices);
+        auto ve = end(vertices);
+
+        if (vi==ve) {
+            clear();
+            return;
+        }
+
+        double left = *vi++;
+        if (vi==ve) {
+            throw std::runtime_error("vertex list too short");
+        }
+
+        double right = *vi++;
+        push_back(left, right);
+
+        while (vi!=ve) {
+            double right = *vi++;
+            push_back(right);
+        }
     }
 };
+
+
+namespace impl {
+    template <typename A, typename B> 
+    struct pair_type_map { using type = std::pair<A, B>; };
+
+    template <typename A>
+    struct pair_type_map<A, void> { using type = A; };
+
+    template <typename B>
+    struct pair_type_map<void, B> { using type = B; };
+
+    template <>
+    struct pair_type_map<void, void> { using type = void; };
+
+    template <typename A, typename B>
+    using pair_type = typename pair_type_map<A, B>::type;
+
+    template <typename A, typename B>
+    void general_pw_push_pair(
+        pw_elements<std::pair<A, B>>& out,
+        double left, double right,
+        const pw_elements<A>& a, pw_size_type ai,
+        const pw_elements<B>& b, pw_size_type bi)
+    {
+        out.push_back(left, right, std::pair<A, B>{a[ai], b[bi]});
+    }
+
+    template <typename A>
+    void general_pw_push_pair(
+        pw_elements<A>& out,
+        double left, double right,
+        const pw_elements<A>& a, pw_size_type ai,
+        const pw_elements<void>& b, pw_size_type bi)
+    {
+        out.push_back(left, right, a[ai]);
+    }
+
+    template <typename B>
+    void general_pw_push_pair(
+        pw_elements<B>& out,
+        double left, double right,
+        const pw_elements<void>& a, pw_size_type ai,
+        const pw_elements<B>& b, pw_size_type bi)
+    {
+        out.push_back(left, right, b[bi]);
+    }
+
+    void general_pw_push_pair(
+        pw_elements<void>& out,
+        double left, double right,
+        const pw_elements<void>& a, pw_size_type ai,
+        const pw_elements<void>& b, pw_size_type bi)
+    {
+        out.push_back(left, right);
+    }
+}
+
+template <typename A, typename B>
+pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elements<B>& b) {
+    pw_elements<impl::pair_type<A, B>> m;
+
+    if (a.empty() || b.empty()) return m;
+
+    double lmax = std::max(a.bounds().first, b.bounds().first);
+    double rmin = std::min(a.bounds().second, b.bounds().second);
+    if (rmin<lmax) return m;
+
+    double left = lmax;
+    pw_size_type ai = a.intervals().index(left);
+    pw_size_type bi = b.intervals().index(left);
+
+    if (rmin==left) {
+        impl::general_pw_push_pair(m, left, left, a, ai, b, bi);
+        return m;
+    }
+
+    double a_right = a.interval(ai).second;
+    double b_right = b.interval(bi).second;
+
+    while (left<rmin) {
+        double right = std::min(a_right, b_right);
+        right = std::min(right, rmin);
+
+        impl::general_pw_push_pair(m, left, right, a, ai, b, bi);
+        if (a_right<=right) {
+            a_right = a.interval(++ai).second;
+        }
+        if (b_right<=right) {
+            b_right = b.interval(++bi).second;
+        }
+
+        left = right;
+    }
+    return m;
+}
+
+
+
+#if 0
 
 // View of a restricted or subdivided pw_elements object.
 // Overrides element()/operator[] to reference elements in the viewed object.
@@ -299,5 +389,6 @@ pw_subview<X> subdivide(const pw_elements<X>& pw, const Seq& by) {
 
     // TODO ...
 }
+#endif
 
 } // namespace arb
