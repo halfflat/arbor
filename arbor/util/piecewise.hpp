@@ -5,9 +5,18 @@
 // Using vectors everywhere here for ease; consider making
 // something more container/sequence-generic later.
 
+#include <initializer_list>
 #include <vector>
 
 #include "util/partition.hpp"
+
+#if 0
+#include "io/trace.hpp"
+template <typename X, typename Y>
+std::ostream& operator<<(std::ostream& s, const std::pair<X,Y>& p) {
+    return s << '<' << p.first << ',' << p.second << '>';
+}
+#endif
 
 namespace arb {
 
@@ -26,6 +35,32 @@ struct pw_elements {
     std::vector<double> vertex_;
     std::vector<X> element_;
 
+    // ctors and assignment:
+
+    pw_elements() = default;
+
+    template <typename VSeq, typename ESeq>
+    pw_elements(const VSeq& vs, const ESeq& es) {
+        assign(vs, es);
+    }
+
+    pw_elements(std::initializer_list<double> vs, std::initializer_list<X> es) {
+        assign(vs, es);
+    }
+
+    pw_elements(pw_elements&&) = default;
+    pw_elements(const pw_elements&) = default;
+
+    template <typename Y>
+    explicit pw_elements(const pw_elements<Y>& from):
+        vertex_(from.vertex_), element_(from.element_.begin(), from.element_.end())
+    {}
+
+    pw_elements& operator=(pw_elements&&) = default;
+    pw_elements& operator=(const pw_elements&) = default;
+
+    // access:
+
     auto intervals() const { return util::partition_view(vertex_); }
     auto interval(size_type i) const { return intervals()[i]; }
 
@@ -34,15 +69,11 @@ struct pw_elements {
     size_type size() const { return element_.size(); }
     bool empty() const { return size()==0; }
 
-    void reserve(size_type n) {
-        vertex_.reserve(n+1);
-        element_.reserve(n);
+    bool operator==(const pw_elements& x) const {
+        return vertex_==x.vertex_ && element_==x.element_;
     }
 
-    void clear() {
-        vertex_.clear();
-        element_.clear();
-    }
+    bool operator!=(const pw_elements& x) const { return !(*this==x); }
 
     const auto& elements() const { return element_; }
     const auto& vertices() const { return vertex_; }
@@ -53,12 +84,24 @@ struct pw_elements {
     X& operator[](size_type i) { return element(i); }
     const X& operator[](size_type i) const { return element(i); }
 
-    size_type index_of(double x) {
+    size_type index_of(double x) const {
         if (empty()) return npos;
 
         auto partn = intervals();
         if (x == partn.bounds().second) return size()-1;
         else return partn.index(x);
+    }
+
+    // mutating operations:
+
+    void reserve(size_type n) {
+        vertex_.reserve(n+1);
+        element_.reserve(n);
+    }
+
+    void clear() {
+        vertex_.clear();
+        element_.clear();
     }
 
     template <typename U>
@@ -72,6 +115,9 @@ struct pw_elements {
         }
 
         // Extend element_ first in case a conversion/copy/move throws.
+
+        //DEBUG << "push_back element " << elem;
+
         element_.push_back(std::forward<U>(elem));
         if (vertex_.empty()) vertex_.push_back(left);
         vertex_.push_back(right);
@@ -86,6 +132,11 @@ struct pw_elements {
         push_back(vertex_.back(), right, elem);
     }
 
+    void assign(std::initializer_list<double> vs, std::initializer_list<X> es) {
+        using util::make_range;
+        assign(make_range(vs.begin(), vs.end()), make_range(es.begin(), es.end()));
+    }
+
     template <typename Seq1, typename Seq2>
     void assign(const Seq1& vertices, const Seq2& elements) {
         using std::begin;
@@ -98,7 +149,7 @@ struct pw_elements {
         auto ee = end(elements);
 
         if (ei==ee) { // empty case
-            if (vi==ve) {
+            if (vi!=ve) {
                 throw std::runtime_error("vertex list too long");
             }
             clear();
@@ -109,6 +160,8 @@ struct pw_elements {
         if (vi==ve) {
             throw std::runtime_error("vertex list too short");
         }
+
+        clear();
 
         double right = *vi++;
         push_back(left, right, *ei++);
@@ -136,6 +189,26 @@ template <> struct pw_elements<void> {
 
     std::vector<double> vertex_;
 
+    // ctors and assignment:
+
+    template <typename VSeq>
+    explicit pw_elements(const VSeq& vs) { assign(vs); }
+
+    pw_elements(std::initializer_list<double> vs) { assign(vs); }
+
+    pw_elements() = default;
+    pw_elements(pw_elements&&) = default;
+    pw_elements(const pw_elements&) = default;
+
+    template <typename Y>
+    explicit pw_elements(const pw_elements<Y>& from):
+        vertex_(from.vertex_) {}
+
+    pw_elements& operator=(pw_elements&&) = default;
+    pw_elements& operator=(const pw_elements&) = default;
+
+    // access:
+
     auto intervals() const { return util::partition_view(vertex_); }
     auto interval(size_type i) const { return intervals()[i]; }
 
@@ -144,15 +217,20 @@ template <> struct pw_elements<void> {
     size_type size() const { return vertex_.empty()? 0: vertex_.size()-1; }
     bool empty() const { return vertex_.empty(); }
 
+    bool operator==(const pw_elements& x) const { return vertex_==x.vertex_; }
+    bool operator!=(const pw_elements& x) const { return !(*this==x); }
+
     const auto& vertices() const { return vertex_; }
 
-    size_type index_of(double x) {
+    size_type index_of(double x) const {
         if (empty()) return npos;
 
         auto partn = intervals();
         if (x == partn.bounds().second) return size()-1;
         else return partn.index(x);
     }
+
+    // mutating operations:
 
     void reserve(size_type n) { vertex_.reserve(n+1); }
     void clear() { vertex_.clear(); }
@@ -177,6 +255,10 @@ template <> struct pw_elements<void> {
         vertex_.push_back(right);
     }
 
+    void assign(std::initializer_list<double> vs) {
+        assign(util::make_range(vs.begin(), vs.end()));
+    }
+
     template <typename Seq1>
     void assign(const Seq1& vertices) {
         using std::begin;
@@ -194,6 +276,8 @@ template <> struct pw_elements<void> {
         if (vi==ve) {
             throw std::runtime_error("vertex list too short");
         }
+
+        clear();
 
         double right = *vi++;
         push_back(left, right);
@@ -261,6 +345,8 @@ namespace impl {
         out.push_back(left, right);
     }
 }
+
+// TODO: Consider making a lazy `meet_view` version of meet.
 
 template <typename A, typename B>
 pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elements<B>& b) {
