@@ -10,14 +10,6 @@
 
 #include "util/partition.hpp"
 
-#if 0
-#include "io/trace.hpp"
-template <typename X, typename Y>
-std::ostream& operator<<(std::ostream& s, const std::pair<X,Y>& p) {
-    return s << '<' << p.first << ',' << p.second << '>';
-}
-#endif
-
 namespace arb {
 
 using pw_size_type = unsigned;
@@ -115,8 +107,6 @@ struct pw_elements {
         }
 
         // Extend element_ first in case a conversion/copy/move throws.
-
-        //DEBUG << "push_back element " << elem;
 
         element_.push_back(std::forward<U>(elem));
         if (vertex_.empty()) vertex_.push_back(left);
@@ -386,106 +376,5 @@ pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elemen
     }
     return m;
 }
-
-
-
-#if 0
-
-// View of a restricted or subdivided pw_elements object.
-// Overrides element()/operator[] to reference elements in the viewed object.
-// Provides index() for access to to the indices to the viewed object.
-
-template <typename X>
-struct pw_subview: pw_elements<pw_size_type> {
-    using base = pw_elements<pw_size_type>;
-    using base::size_type;
-
-    const pw_elements<X>& data;
-
-    size_type index(size_type i) const { return element_[i]; }
-
-    X& element(size_type i) { return data.element(index(i)); }
-    const X& element(size_type i) const { return data.element(index(i)); }
-
-    X& operator[](size_type i) { return element(index(i)); }
-    const X& operator[](size_type i) const { return element(index(i)); }
-
-    explicit pw_subview(const pw_elements<X>& els): data(els) {}
-
-    void push_back(double left, double right) {
-        size_type ridx = data.index_of(right);
-        if (ridx == npos) {
-            throw std::range_error("span outside support");
-        }
-
-        size_type lidx = empty()? data.index_of(left): element_.back();
-        if (lidx == npos) {
-            throw std::range_error("span outside support");
-        }
-        else if (lidx != ridx) {
-            throw std::range_error("span crossed multiple elements");
-        }
-
-        base::push_back(left, right, ridx);
-    }
-
-    void push_back(double right) {
-        if (empty()) {
-            throw std::runtime_error("require initial left vertex for element");
-        }
-
-        push_back(vertex_.back(), right);
-    }
-
-    template <typename Seq1>
-    void assign(const Seq1& vertices) {
-        impl::generic_vertices_assign(*this, vertices);
-    }
-};
-
-template <typename X>
-pw_subview<X> restrict(const pw_elements<X>& pw, double left, double right) {
-    constexpr pw_size_type npos = pw_npos;
-
-    pw_subview<X> v(pw);
-    if (pw.empty() || right<left) return v;
-
-    left = std::max(left, pw.bounds().first);
-    right = std::min(right, pw.bounds().second);
-
-    pw_size_type lidx = pw.intervals().index(left);
-    pw_size_type ridx = pw.intervals().index(right);
-    if (ridx==npos) ridx = pw.size()-1;
-
-    if (lidx==ridx) {
-        v.push_back(left, right);
-        return v;
-    }
-
-    v.push_back(left, pw.interval(lidx).second);
-    while (lidx<ridx) {
-        v.push_back(pw.interval(++lidx).second);
-    }
-    v.push_back(right);
-    return v;
-}
-
-// Create a view of `pw` with the same vertices in addition to
-// any vertices from `by` that lie within the bounds of `pw`.
-
-template <typename X, typename Seq>
-pw_subview<X> subdivide(const pw_elements<X>& pw, const Seq& by) {
-    using std::begin;
-    using std::end;
-
-    auto bi = begin(by);
-    auto be = end(by);
-
-    double left = pw.bounds().first;
-    while (bi!=be && *bi<=left) ++bi;
-
-    // TODO ...
-}
-#endif
 
 } // namespace arb
