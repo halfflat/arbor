@@ -41,6 +41,9 @@ public:
     // The child branches of branch b.
     const std::vector<msize_t>& branch_children(msize_t b) const;
 
+    // Branches with no children.
+    const std::vector<msize_t>& terminal_branches() const;
+
     // Range of indexes into the sample points in branch b.
     mindex_range branch_indexes(msize_t b) const;
 

@@ -1,7 +1,5 @@
 #pragma once
 
-
-#include <unordered_map>
 #include <string>
 #include <vector>
 
@@ -48,9 +46,6 @@ public:
     using value_type = double;
     using point_type = point<value_type>;
 
-    using region_map = std::unordered_map<std::string, mcable_list>;
-    using locset_map = std::unordered_map<std::string, mlocation_list>;
-
     using gap_junction_instance = mlocation;
 
     struct synapse_instance {
@@ -68,7 +63,6 @@ public:
         double threshold;
     };
 
-    cable_cell_parameter_set default_parameters;
 
     /// Default constructor
     cable_cell();
@@ -83,6 +77,9 @@ public:
     cable_cell(const class morphology& m,
                const label_dict& dictionary={},
                bool compartments_from_discretization=false);
+
+    /// Access to concrete regions, locsets, and (embedded) morphology.
+    const mprovider& embedding();
 
     // the number of branches in the cell
     size_type num_branches() const;
@@ -160,8 +157,6 @@ public:
     const std::vector<detector_instance>& detectors() const;
     const std::vector<stimulus_instance>& stimuli() const;
 
-    const em_morphology* morphology() const;
-
     // Checks that two cells have the same
     //  - number and type of segments
     //  - volume and area properties of each segment
@@ -184,7 +179,6 @@ public:
         const cable_cell_parameter_set& global_defaults) const;
 
 private:
-
     std::unique_ptr<cable_cell_impl, void (*)(cable_cell_impl*)> impl_;
 };
 

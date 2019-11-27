@@ -1,42 +1,29 @@
-#include <cmath>
 #include <iostream>
-#include <unordered_map>
 #include <utility>
 
-#include <arbor/math.hpp>
-#include <arbor/morph/error.hpp>
+#include <arbor/morph/morphexcept.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/sample_tree.hpp>
 #include <arbor/morph/primitives.hpp>
 
-#include "algorithms.hpp"
-#include "io/sepval.hpp"
 #include "morph/mbranch.hpp"
 #include "util/span.hpp"
-#include "util/strprintf.hpp"
+
+using arb::util::make_span;
 
 namespace arb {
-
 namespace impl{
 
 std::vector<mbranch> branches_from_parent_index(const std::vector<msize_t>& parents,
                                                 const std::vector<point_prop>& props,
                                                 bool spherical_root)
 {
-    using util::make_span;
-
-    const char* errstr_single_sample_root =
-        "A morphology with only one sample must have a spherical root";
-    const char* errstr_incomplete_cable =
-        "A branch must contain at least two samples";
-
-    if (parents.empty()) return {};
-
     auto nsamp = parents.size();
+    if (!nsamp) return {};
 
     // Enforce that a morphology with one sample has a spherical root.
     if (!spherical_root && nsamp==1u) {
-        throw morphology_error(errstr_single_sample_root);
+        throw incomplete_branch(0);
     }
 
     std::vector<int> bids(nsamp);
@@ -70,7 +57,7 @@ std::vector<mbranch> branches_from_parent_index(const std::vector<msize_t>& pare
     if (spherical_root) {
         for (auto i: make_span(1, nbranches)) { // skip the root.
             if (branches[i].size()<2u) {
-                throw morphology_error(errstr_incomplete_cable);
+                throw incomplete_branch(i);
             }
         }
     }
@@ -109,6 +96,7 @@ struct morphology_impl {
     std::vector<impl::mbranch> branches_;
     std::vector<msize_t> branch_parents_;
     std::vector<msize_t> root_children_;
+    std::vector<msize_t> terminal_branches_;
     std::vector<std::vector<msize_t>> branch_children_;
 
     morphology_impl(sample_tree m, bool use_spherical_root);
@@ -134,11 +122,7 @@ morphology_impl::morphology_impl(sample_tree m):
 }
 
 void morphology_impl::init() {
-    using util::make_span;
-    using util::count_along;
-
     auto nsamp = samples_.size();
-
     if (!nsamp) return;
 
     // Generate branches.
@@ -158,6 +142,15 @@ void morphology_impl::init() {
             root_children_.push_back(i);
         }
     }
+
+    // Collect terminal branches.
+    terminal_branches_.reserve(nbranch);
+    for (auto i: make_span(nbranch)) {
+        if (branch_children_[i].empty()) {
+            terminal_branches_.push_back(i);
+        }
+    }
+    terminal_branches_.shrink_to_fit();
 }
 
 std::ostream& operator<<(std::ostream& o, const morphology_impl& m) {
@@ -203,6 +196,10 @@ const std::vector<msize_t>& morphology::sample_parents() const {
 // The child branches of branch b.
 const std::vector<msize_t>& morphology::branch_children(msize_t b) const {
     return b==mnpos? impl_->root_children_: impl_->branch_children_[b];
+}
+
+const std::vector<msize_t>& morphology::terminal_branches() const {
+    return impl_->terminal_branches_;
 }
 
 // Whether the root of the morphology is spherical.

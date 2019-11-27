@@ -1,4 +1,5 @@
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 #include <arbor/cable_cell.hpp>
@@ -13,6 +14,29 @@
 
 namespace arb {
 
+using region_map = std::unordered_map<std::string, mcable_list>;
+using locset_map = std::unordered_map<std::string, mlocation_list>;
+
+template <typename concrete_embedding>
+struct lazy_provider: public concrete_embedding, public mprovider {
+    const mprovider& wrapped;
+    const label_dict& dictionary;
+    mutable region_map regions;
+    mutable locset_map locsets;
+
+    label_evaluator(const mprovider& wrapped, const label_dict& dictionary):
+        wrapped(wrapped),
+        dictionary(dictionary)
+    {
+        for (auto& binding: dictionary.locsets()) {
+            
+        }
+
+    }
+
+
+};
+
 using value_type = cable_cell::value_type;
 using index_type = cable_cell::index_type;
 using size_type = cable_cell::size_type;
@@ -26,9 +50,6 @@ struct cable_cell_impl {
     using synapse_instance      = cable_cell::synapse_instance;
     using gap_junction_instance = cable_cell::gap_junction_instance;
     using detector_instance     = cable_cell::detector_instance;
-
-    using region_map = cable_cell::region_map;
-    using locset_map = cable_cell::locset_map;
 
     cable_cell_impl(const arb::morphology& m,
                     const label_dict& dictionary,

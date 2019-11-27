@@ -32,6 +32,7 @@ set(arbor_sources
     morph/label_dict.cpp
     morph/locset.cpp
     morph/mbranch.cpp
+    morph/morphexcept.cpp
     morph/morphology.cpp
     morph/primitives.cpp
     morph/region.cpp

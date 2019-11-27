@@ -4,7 +4,7 @@
 
 #include <arbor/morph/error.hpp>
 #include <arbor/morph/locset.hpp>
-#include <arbor/morph/region.hpp>
+#include <arbor/morph/mprovider.hpp>
 
 #include "util/rangeutil.hpp"
 #include "util/strprintf.hpp"
@@ -14,12 +14,12 @@
 namespace arb {
 namespace ls {
 
-//
-// Functions for taking the sum, union and intersection of location_lists (multisets).
-//
-
-using it_t = mlocation_list::iterator;
-using const_it_t = mlocation_list::const_iterator;
+// Throw on invalid mlocation.
+void assert_valid(mlocation x) {
+    if (!test_invariants(x)) {
+        throw invalid_mlocation(x);
+    }
+}
 
 // Advance an iterator to the first value that is not equal to its current
 // value, or end, whichever comes first.
@@ -97,14 +97,16 @@ mlocation_list intersection(const mlocation_list& lhs, const mlocation_list& rhs
     return L;
 }
 
-// Null set
+
+// Empty locset.
+
 struct nil_ {};
 
 locset nil() {
     return locset{nil_{}};
 }
 
-mlocation_list thingify_(const nil_& x, const em_morphology& m) {
+mlocation_list thingify_(const nil_& x, const mprovider& {
     return {};
 }
 
@@ -112,20 +114,22 @@ std::ostream& operator<<(std::ostream& o, const nil_& x) {
     return o << "nil";
 }
 
-// An explicit location
+// An explicit location.
+
 struct location_ {
     mlocation loc;
 };
 
 locset location(mlocation loc) {
-    if (!test_invariants(loc)) {
-        throw morphology_error(util::pprintf("invalid location {}", loc));
-    }
+    assert_valid(loc);
     return locset{location_{loc}};
 }
 
-mlocation_list thingify_(const location_& x, const em_morphology& m) {
-    m.assert_valid_location(x.loc);
+mlocation_list thingify_(const location_& x, const provider& m) {
+    assert_valid(loc);
+    if (loc.branch>=m.num_branches()) {
+        throw no_such_branch(loc.branch);
+    }
     return {x.loc};
 }
 
@@ -134,7 +138,8 @@ std::ostream& operator<<(std::ostream& o, const location_& x) {
 }
 
 
-// Location corresponding to a sample id
+// Location corresponding to a sample id.
+
 struct sample_ {
     msize_t index;
 };
@@ -151,7 +156,8 @@ std::ostream& operator<<(std::ostream& o, const sample_& x) {
     return o << "(sample " << x.index << ")";
 }
 
-// set of terminal nodes on a morphology
+// Set of terminal points (most distal points).
+
 struct terminal_ {};
 
 locset terminal() {
@@ -166,7 +172,8 @@ std::ostream& operator<<(std::ostream& o, const terminal_& x) {
     return o << "terminal";
 }
 
-// the root node of a morphology
+// Root location (most proximal point).
+
 struct root_ {};
 
 locset root() {
@@ -181,7 +188,27 @@ std::ostream& operator<<(std::ostream& o, const root_& x) {
     return o << "root";
 }
 
-// intersection of two point sets
+// Named locset.
+
+struct named_ {
+    const std::string& name;
+};
+
+locset named(const std::string& name) {
+    return locset(named_{name});
+}
+
+mlocation_list thingify_(const named_& n, const mprovider& p) {
+    return p.named_locset(n.name);
+}
+
+std::ostream& operator<<(std::ostream& o, const named_& x) {
+    return o << "(named \" << x.name << "\")";
+}
+
+
+// Intersection of two point sets.
+
 struct land {
     locset lhs;
     locset rhs;
@@ -196,7 +223,8 @@ std::ostream& operator<<(std::ostream& o, const land& x) {
     return o << "(intersect " << x.lhs << " " << x.rhs << ")";
 }
 
-// union of two point sets
+// Union of two point sets.
+
 struct lor {
     locset lhs;
     locset rhs;
@@ -211,7 +239,8 @@ std::ostream& operator<<(std::ostream& o, const lor& x) {
     return o << "(join " << x.lhs << " " << x.rhs << ")";
 }
 
-// sum of two point sets
+// Sum of two point sets.
+
 struct lsum {
     locset lhs;
     locset rhs;
