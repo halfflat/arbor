@@ -168,7 +168,7 @@ region branch(msize_t bid) {
 }
 
 mcable_list thingify_(const cable_& reg, const mprovider& p) {
-    if (reg.cable.branch>=p.num_branches()) {
+    if (reg.cable.branch>=p.morpho.num_branches()) {
         throw no_such_branch(reg.cable.branch);
     }
     return {reg.cable};
@@ -251,7 +251,7 @@ region all() {
 }
 
 mcable_list thingify_(const all_&, const mprovider& p) {
-    auto nb = p.num_branches();
+    auto nb = p.morpho.num_branches();
     mcable_list branches;
     branches.reserve(nb);
     for (auto i: util::make_span(nb)) {
@@ -293,7 +293,7 @@ struct reg_and {
 };
 
 mcable_list thingify_(const reg_and& P, const mprovider& p) {
-    auto& m = p.morphology();
+    auto& m = p.morpho;
 
     using cable_it = std::vector<mcable>::const_iterator;
     using cable_it_pair = std::pair<cable_it, cable_it>;

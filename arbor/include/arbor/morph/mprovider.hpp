@@ -1,86 +1,49 @@
 #pragma once
 
+#include <string>
+#include <unordered_map>
+
+#include <arbor/morph/embed_pwlin1d.hpp>
 #include <arbor/morph/primitives.hpp>
+#include <arbor/morph/label_dict.hpp>
+#include <arbor/util/either.hpp>
 
 namespace arb {
 
-// A concrete embedding encodes the geometry of a morphology.
+using concrete_embedding = embed_pwlin1d;
 
-class concrete_embedding {
-public:
-    virtual mlocation sample_location(msize_t sid) const = 0;
-    virtual double branch_length(msize_t bid) const = 0;
+struct mprovider: public  {
+    morphology morpho;
+    concrete_embedding embed;
 
-    // Integrating over geometry:
-    // length; membrane area; inverse cross-sectional area.
+    // Throw exception on missing or recursive definition.
+    const mcable_list& region(const std::string& name);
+    const mlocation_list& locset(const std::string& name);
 
-    virtual double integrate_length(mcable) = 0;
-    virtual double integrate_area(mcable) = 0;
-    virtual double integrate_ixa(mcable) = 0;
-
-    // Access underlying morphology.
-    virtual const arb::morphology& morphology() = 0;
-};
-
-// An mprovider wraps a concrete embedding and also provides
-// a lookup facility for named regions and locsets.
-
-class mprovider: public concrete_embedding {
-public:
-    virtual mlocation_list named_locset(const std::string&) const = 0;
-    virtual mcable_list named_region(const std::string&) const = 0;
-};
-
-// (Sketching stuff out loud ...)
-
-struct pw1d_embedding: public concrete_embedding {
-    explicit pw1d_embedding(const arb::morphology& m):
-        morphology(m)
+    mprovider(morphology m, const label_dict& dict):
+        morpho(m), embed(m), label_dict_ptr(&dict)
     {
-        // init...
+        init();
     }
 
-    mlocation sample_location(msize_t sid) const override {
-        // ...
+    explicit mprovider(morphology m):
+        morpho(m), embed(m), label_dict_ptr(nullptr)
+    {
+        init();
     }
 
-    double branch_length(msize_t bid) const override {
-        // ...
-    }
+private:
+    struct circular_def {};
 
-    double integrate_length(mcable) const override {
-        // ...
-    }
+    // Maps are mutated only during initialization phase of mprovider.
+    mutable std::unordered_map<std::string, util::either<mcable_list, circular_def>> regions_;
+    mutable std::unordered_map<std::string, util::either<mlocation_list, circular_def>> locsets_;
 
-    double integrate_area(mcable) const override {
-        // ...
-    }
+    // Non-null only during initialization phase.
+    mutable const label_dict* label_dict_ptr;
 
-    double integrate_ixa(mcable) const override {
-        // ...
-    }
-};
-
-// Cached, lazily evaluated named expressions.
-
-using region_map = std::unordered_map<std::string, mcable_list>;
-using locset_map = std::unordered_map<std::string, mlocation_list>;
-
-struct lazy_mprovider: public mprovider {
-    lazy_mprovider(const concrete_embedding& embed, const label_dict& dict):
-        embed(embed), dict(dict)
-    {}
-
-    // Forward geometry queries to embed:
-
-    mlocation sample_location(msize_t sid) const override { return embed.sample_location(id); }
-    double branch_length(msize_t bid) const override { return embed.branch_length(bid); }
-
-    double integrate_length(mcable c) override { return embed.integrate_length(c); }
-    double integrate_area(mcable c) override { return embed.integrate_area(c); }
-    double integrate_ixa(mcable c) override { return embed.integrate_ixa(c); }
-
-    const arb::morphology& morphology() override { return embed.xx; }
+    // Perform greedy initialization of concrete region, locset maps.
+    void init();
 };
 
 } // namespace arb

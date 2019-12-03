@@ -13,9 +13,7 @@
 
 namespace arb {
 
-// Forward declare the backend em_morphology type, required for defining the
-// interface for concretising locsets.
-class em_morphology;
+class mprovider;
 
 class locset;
 
@@ -59,7 +57,7 @@ public:
         return *this;
     }
 
-    friend mlocation_list thingify(const locset& p, const em_morphology& m) {
+    friend mlocation_list thingify(const locset& p, const mprovider& m) {
         return p.impl_->thingify(m);
     }
 
@@ -88,7 +86,7 @@ private:
         virtual ~interface() {}
         virtual std::unique_ptr<interface> clone() = 0;
         virtual std::ostream& print(std::ostream&) = 0;
-        virtual mlocation_list thingify(const em_morphology&) = 0;
+        virtual mlocation_list thingify(const mprovider&) = 0;
     };
 
     std::unique_ptr<interface> impl_;
@@ -102,7 +100,7 @@ private:
             return std::unique_ptr<interface>(new wrap<Impl>(wrapped));
         }
 
-        virtual mlocation_list thingify(const em_morphology& m) override {
+        virtual mlocation_list thingify(const mprovider& m) override {
             return thingify_(wrapped, m);
         }
 

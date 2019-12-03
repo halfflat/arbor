@@ -41,5 +41,15 @@ incomplete_branch::incomplete_branch(msize_t bid):
     bid(bid)
 {}
 
+unbound_name::unbound_name(const std::string& name):
+    morphology_error(pprintf("no definition for '{}'", name)),
+    name(name)
+{}
+
+circular_definition::circular_definition(const std::string& name):
+    morphology_error(pprintf("definition of '{}' requires a definition for '{}'", name, name)),
+    name(name)
+{}
+
 } // namespace arb
 

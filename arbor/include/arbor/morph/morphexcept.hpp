@@ -42,5 +42,15 @@ struct incomplete_branch: morphology_error {
     msize_t bid;
 };
 
+struct unbound_name: morphology_error {
+    unbound_name(const std::string& name);
+    std::string name;
+};
+
+struct circular_definition: morphology_error {
+    circular_definition(const std::string& name);
+    std::string name;
+};
+
 } // namespace arb
 

@@ -10,9 +10,10 @@
 
 #include <arbor/morph/primitives.hpp>
 #include <arbor/morph/morphology.hpp>
-#include <arbor/morph/mprovider.hpp>
 
 namespace arb {
+
+class mprovider;
 
 class region {
 public:
@@ -51,7 +52,7 @@ public:
         return *this;
     }
 
-    friend mcable_list thingify(const region& r, const provider& m) {
+    friend mcable_list thingify(const region& r, const mprovider& m) {
         return r.impl_->thingify(m);
     }
 
@@ -80,7 +81,7 @@ private:
         virtual ~interface() {}
         virtual std::unique_ptr<interface> clone() = 0;
         virtual std::ostream& print(std::ostream&) = 0;
-        virtual mcable_list thingify(const provider&) = 0;
+        virtual mcable_list thingify(const mprovider&) = 0;
     };
 
     std::unique_ptr<interface> impl_;
@@ -94,7 +95,7 @@ private:
             return std::unique_ptr<interface>(new wrap<Impl>(wrapped));
         }
 
-        virtual mcable_list thingify(const provider& m) override {
+        virtual mcable_list thingify(const mprovider& m) override {
             return thingify_(wrapped, m);
         }
 
