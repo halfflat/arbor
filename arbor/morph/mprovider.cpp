@@ -36,7 +36,7 @@ static const auto& try_lookup(const mprovider& provider, const std::string& name
                 throw unbound_name(name);
             }
 
-            return map.emplace(name, thingify(it->second, provider)).first->second.first();
+            return (map[name] = thingify(it->second, provider)).first();
         }
         else {
             throw unbound_name(name);
