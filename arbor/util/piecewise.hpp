@@ -39,7 +39,7 @@ struct indexed_const_iterator {
     const T* ptr_ = nullptr;
     size_type i_ = 0;
 
-    bool operator==(indexed_const_iterator x) const { return ptr_ == x.ptr_ && i_ == ptr_.i_; }
+    bool operator==(indexed_const_iterator x) const { return ptr_ == x.ptr_ && i_ == x.i_; }
     bool operator!=(indexed_const_iterator x) const { return !(*this==x); }
     bool operator<=(indexed_const_iterator x) const { return i_<=x.i_; }
     bool operator<(indexed_const_iterator x)  const { return i_<x.i_; }
@@ -378,7 +378,7 @@ namespace impl {
         const pw_elements<A>& a, pw_size_type ai,
         const pw_elements<B>& b, pw_size_type bi)
     {
-        out.push_back(left, right, std::pair<A, B>{a[ai], b[bi]});
+        out.push_back(left, right, std::pair<A, B>{a.element(ai), b.element(bi)});
     }
 
     template <typename A>
@@ -388,7 +388,7 @@ namespace impl {
         const pw_elements<A>& a, pw_size_type ai,
         const pw_elements<void>& b, pw_size_type bi)
     {
-        out.push_back(left, right, a[ai]);
+        out.push_back(left, right, a.element(ai));
     }
 
     template <typename B>
@@ -398,10 +398,10 @@ namespace impl {
         const pw_elements<void>& a, pw_size_type ai,
         const pw_elements<B>& b, pw_size_type bi)
     {
-        out.push_back(left, right, b[bi]);
+        out.push_back(left, right, b.element(bi));
     }
 
-    void general_pw_push_pair(
+    inline void general_pw_push_pair(
         pw_elements<void>& out,
         double left, double right,
         const pw_elements<void>& a, pw_size_type ai,

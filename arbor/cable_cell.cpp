@@ -333,6 +333,11 @@ const arb::morphology& cable_cell::morphology() const {
     return impl_->provider.morphology();
 }
 
+const mprovider& cable_cell::provider() const {
+    return impl_->provider;
+}
+
+
 //
 // Painters.
 //

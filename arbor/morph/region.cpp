@@ -381,8 +381,12 @@ region::region() {
     *this = reg::nil();
 }
 
-region::region(std::string name) {
-    *this = reg::named(name);
+region::region(std::string label) {
+    *this = reg::named(std::move(label));
+}
+
+region::region(const char* label) {
+    *this = reg::named(label);
 }
 
 } // namespace arb

@@ -87,7 +87,7 @@ set(unit_sources
     test_dry_run_context.cpp
     test_double_buffer.cpp
     test_either.cpp
-    test_em_morphology.cpp
+    #    test_em_morphology.cpp
     test_event_binner.cpp
     test_event_delivery.cpp
     test_event_generators.cpp

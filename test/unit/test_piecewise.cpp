@@ -6,6 +6,8 @@
 #include "util/rangeutil.hpp"
 
 using namespace arb;
+using util::pw_elements;
+using util::pw_npos;
 
 TEST(piecewise, eq) {
     pw_elements<int> p1((double[3]){1., 1.5, 2.}, (int[2]){3, 4});
@@ -79,10 +81,10 @@ TEST(piecewise, assign) {
 
     ASSERT_EQ(4u, p.size());
 
-    EXPECT_EQ(10, p[0]);
-    EXPECT_EQ( 8, p[1]);
-    EXPECT_EQ( 9, p[2]);
-    EXPECT_EQ( 4, p[3]);
+    EXPECT_EQ(10, p[0].second);
+    EXPECT_EQ( 8, p[1].second);
+    EXPECT_EQ( 9, p[2].second);
+    EXPECT_EQ( 4, p[3].second);
 
     using dp = std::pair<double, double>;
     EXPECT_EQ(dp(1.0, 1.5), p.interval(0));
@@ -157,6 +159,33 @@ TEST(piecewise, assign_void) {
     EXPECT_EQ(q3, q4);
 }
 
+TEST(piecewise, access) {
+    pw_elements<int> p;
+
+    double v[5] = {1., 1.5, 2., 2.5, 3.};
+    int x[4] = {10, 8, 9, 4};
+    p.assign(v, x);
+
+    for (unsigned i = 0; i<4; ++i) {
+        EXPECT_EQ(v[i], p[i].first.first);
+        EXPECT_EQ(v[i+1], p[i].first.second);
+
+        EXPECT_EQ(v[i], p.interval(i).first);
+        EXPECT_EQ(v[i+1], p.interval(i).second);
+
+        EXPECT_EQ(x[i], p[i].second);
+        EXPECT_EQ(x[i], p.element(i));
+    }
+
+    EXPECT_EQ(p[0], p.front());
+    EXPECT_EQ(p[3], p.back());
+
+    unsigned j = 0;
+    for (auto entry: p) {
+        EXPECT_EQ(p[j++], entry);
+    }
+}
+
 TEST(piecewise, bounds) {
     pw_elements<int> p{{1., 1.5, 2., 2.5, 3.}, {10, 8, 9, 4}};
 
@@ -213,12 +242,12 @@ TEST(piecewise, push) {
     q.push_back(3.1, 4.3, 5);
     EXPECT_EQ(dp(1.1, 3.1), q.interval(0));
     EXPECT_EQ(dp(3.1, 4.3), q.interval(1));
-    EXPECT_EQ(4, q[0]);
-    EXPECT_EQ(5, q[1]);
+    EXPECT_EQ(4, q[0].second);
+    EXPECT_EQ(5, q[1].second);
 
     q.push_back(7.2, 6);
     EXPECT_EQ(dp(4.3, 7.2), q.interval(2));
-    EXPECT_EQ(6, q[2]);
+    EXPECT_EQ(6, q[2].second);
 
     // Supplied left side doesn't match current right.
     EXPECT_THROW(q.push_back(7.4, 9.1, 7), std::runtime_error);

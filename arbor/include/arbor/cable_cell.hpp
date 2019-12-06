@@ -83,6 +83,7 @@ public:
     /// Access to morphology and embedding
     const concrete_embedding& embedding() const;
     const arb::morphology& morphology() const;
+    const mprovider& provider() const;
 
     // the number of branches in the cell
     size_type num_branches() const;

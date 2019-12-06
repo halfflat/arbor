@@ -99,8 +99,11 @@ struct rat_eval<0, c, k, upper> {
 template <unsigned p, unsigned q>
 struct rat_element {
     // Construct from function evaluated on nodes.
-    template <typename F>
-    explicit rat_element(F&& fn) {
+    template <
+        typename F,
+        typename _ = std::enable_if_t<std::is_convertible<decltype(std::declval<F>()(0.0)), double>::value>
+    >
+    explicit rat_element(F&& fn, _* = nullptr) {
         if (size()>1) {
             for (unsigned i = 0; i<size(); ++i) data_[i] = fn(i/(size()-1.0));
         }

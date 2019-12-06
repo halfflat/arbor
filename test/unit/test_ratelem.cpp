@@ -6,6 +6,7 @@
 #include "util/rangeutil.hpp"
 
 using namespace arb;
+using util::rat_element;
 
 TEST(ratelem, direct_ctor) {
     rat_element<0, 0> x00(3.5);
@@ -23,10 +24,10 @@ TEST(ratelem, direct_ctor) {
     std::array<float, 4> x21_arr{1.25f, 1.5f, 0.5f, 2.25f};
     rat_element<2, 1> x21(x21_arr);
     EXPECT_EQ(4u, x21.size());
-    EXPECT_EQ(1.25., x21[0]);
-    EXPECT_EQ(1.5.,  x21[1]);
-    EXPECT_EQ(0.5.,  x21[2]);
-    EXPECT_EQ(2.25., x21[3]);
+    EXPECT_EQ(1.25, x21[0]);
+    EXPECT_EQ(1.5,  x21[1]);
+    EXPECT_EQ(0.5,  x21[2]);
+    EXPECT_EQ(2.25, x21[3]);
 
     int x20_arr[3] = {3, 2, 4};
     rat_element<2, 0> x20(x20_arr);
