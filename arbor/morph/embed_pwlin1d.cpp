@@ -8,14 +8,16 @@
 
 #include "util/piecewise.hpp"
 #include "util/range.hpp"
-#include "util/rat_element.hpp"
+#include "util/rangeutil.hpp"
+#include "util/ratelem.hpp"
+#include "util/span.hpp"
 
 namespace arb {
 
-using std::size_t;
+using util::rat_element;
 
 template <unsigned p, unsigned q>
-using pw_ratpoly = piecewise<rat_element<p, q>>;
+using pw_ratpoly = util::pw_elements<rat_element<p, q>>;
 
 template <unsigned p, unsigned q>
 using branch_pw_ratpoly = std::vector<pw_ratpoly<p, q>>;
@@ -37,11 +39,10 @@ double interpolate(const branch_pw_ratpoly<p, q>& f, unsigned bid, double pos) {
 
 template <unsigned p, unsigned q>
 double integrate(const branch_pw_ratpoly<p, q>& f, unsigned bid, const pw_constant_fn& g) {
-    auto index = pw.index_of(pos);
     double accum = 0;
-    for (size_t i = 0; i<g.size(); ++i) {
-        std::pair<double> interval = g.interval(i);
-        accum += g.element(i)*(interpolate(f, bid, interval.second)-interpolate(f, bid, interval.first)):
+    for (msize_t i = 0; i<g.size(); ++i) {
+        std::pair<double, double> interval = g.interval(i);
+        accum += g.element(i)*(interpolate(f, bid, interval.second)-interpolate(f, bid, interval.first));
     }
     return accum;
 }
@@ -52,7 +53,7 @@ struct embed_pwlin1d_data {
     branch_pw_ratpoly<2, 0> area;
     branch_pw_ratpoly<1, 1> ixa;
 
-    explicit embed_pwlin1d_data(size_t n_branch):
+    explicit embed_pwlin1d_data(msize_t n_branch):
         length(n_branch),
         radius(n_branch),
         area(n_branch),
@@ -68,11 +69,11 @@ double embed_pwlin1d::integrate_length(msize_t bid, const pw_constant_fn& g) con
     return integrate(data_->length, bid, g);
 }
 
-double embed_pwlin1d::integrate_area(msize_t bid, const pw_constant_fn&) const {
+double embed_pwlin1d::integrate_area(msize_t bid, const pw_constant_fn& g) const {
     return integrate(data_->area, bid, g);
 }
 
-double embed_pwlin1d::integrate_ixa(msize_t bid, const pw_constant_fn&) const {
+double embed_pwlin1d::integrate_ixa(msize_t bid, const pw_constant_fn& g) const {
     return integrate(data_->ixa, bid, g);
 }
 
@@ -94,15 +95,15 @@ double embed_pwlin1d::integrate_ixa(mcable c) const {
 
 embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
     constexpr double pi = math::pi<double>;
-    size_t n_branch = m.num_branches();
+    msize_t n_branch = m.num_branches();
     data_ = std::make_shared<embed_pwlin1d_data>(n_branch);
 
     if (!n_branch) return;
 
     const auto& samples = m.samples();
-    sample_locations.resize(m.num_samples());
+    sample_locations_.resize(m.num_samples());
 
-    for (size_t bid = 0; bid<n_branch; ++bid) {
+    for (msize_t bid = 0; bid<n_branch; ++bid) {
         unsigned parent = m.branch_parent(bid);
         auto sample_indices = util::make_range(m.branch_indexes(bid));
 
@@ -110,17 +111,16 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
             arb_assert(sample_indices.size()==1);
 
             // Treat spherical root as area-equivalent cylinder.
-            sample_locations_.push_back({0, 0.5});
             double r = samples[0].loc.radius;
 
-            data->length[bid].push_back(0., 1., rat_element<1, 0>(0, r*2));
-            data->radius[bid].push_back(0., 1., rat_element<1, 0>(r, r));
+            data_->length[bid].push_back(0., 1., rat_element<1, 0>(0, r*2));
+            data_->radius[bid].push_back(0., 1., rat_element<1, 0>(r, r));
 
             double cyl_area = 4*pi*r*r;
-            data->area[bid].push_back(0., 1., rat_element<2, 0>(0., cyl_area*0.5, cyl_area));
+            data_->area[bid].push_back(0., 1., rat_element<2, 0>(0., cyl_area*0.5, cyl_area));
 
             double cyl_ixa = 2.0/(pi*r);
-            data->ixa[bid].push_back(0., 1., rat_element<1, 1>(0., cyl_ixa*0.5, cyl_ixa));
+            data_->ixa[bid].push_back(0., 1., rat_element<1, 1>(0., cyl_ixa*0.5, cyl_ixa));
         }
         else {
             arb_assert(sample_indices.size()>1);
@@ -141,57 +141,51 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
 
             for (auto i: util::count_along(sample_indices)) {
                 if (i==0 && parent!=mnpos) continue;
-                sample_locations[sample_indices[i]] = mlocation{bid, length_scale*sample_distance[i]};
+                sample_locations_[sample_indices[i]] = mlocation{bid, length_scale*sample_distance[i]};
             }
-            sample_locations[sample_indices.back()].pos = 1.; // Circumvent any rounding infelicities.
+            sample_locations_[sample_indices.back()].pos = 1.; // Circumvent any rounding infelicities.
 
-            double proximal_length = parent==mnpos? 0: data->length[parent].back()[1];
-            data->length[bid].push_back(0., 1. rat_element<1, 0>(proximal_len, proximal_len+branch_length));
+            double length_0 = parent==mnpos? 0: data_->length[parent].back().second[1];
+            data_->length[bid].push_back(0., 1, rat_element<1, 0>(length_0, length_0+branch_length));
 
-            double area_0 = parent=mnpos? 0: data->area[parent].back()[1];
-            double ixa_0 = parent=mnpos? 0: data->ixa[parent].back()[1];
+            double area_0 = parent=mnpos? 0: data_->area[parent].back().second[1];
+            double ixa_0 = parent=mnpos? 0: data_->ixa[parent].back().second[1];
 
             if (length_scale==0) {
                 // Zero-length branch? Weird, but make best show of it.
-                double r = samples[sample_indices[0]].radius;
-                data->radius[bid].push_back(0., 1., rat_element<1, 0>(r, r));
-                data->area[bid].push_back(0., 1., rat_element<2, 0>(proximal_area, proximal_area, proximal_area));
+                double r = samples[sample_indices[0]].loc.radius;
+                data_->radius[bid].push_back(0., 1., rat_element<1, 0>(r, r));
+                data_->area[bid].push_back(0., 1., rat_element<2, 0>(area_0, area_0, area_0));
             }
             else {
                 for (auto i: util::count_along(sample_indices)) {
                     if (!i) continue;
 
-                    double x0 = sample_locations[sample_indices[i-1]].pos;
-                    double x1 = sample_locations[sample_indices[i]].pos;
+                    double x0 = sample_locations_[sample_indices[i-1]].pos;
+                    double x1 = sample_locations_[sample_indices[i]].pos;
                     if (x0==x1) continue;
 
-                    double r0 = samples[sample_indices[i-1]].radius;
-                    double r1 = samples[sample_indices[i]].radius;
-                    data->radius[bid].push_back(x0, x1, rat_element<1, 0>(r0, r1));
+                    double r0 = samples[sample_indices[i-1]].loc.radius;
+                    double r1 = samples[sample_indices[i]].loc.radius;
+                    data_->radius[bid].push_back(x0, x1, rat_element<1, 0>(r0, r1));
 
                     double c = pi*std::sqrt((r1-r0)*(r1-r0)+(x1-x0)*(x1-x0));
                     double area_half = area_0 + (0.75*r0+0.25*r1)*c;
                     double area_1 = area_0 + (r0+r1)*c;
-                    data->area[bid].push_back(x0, x1, rat_element<2, 0>(area_0, area_half, area_1));
+                    data_->area[bid].push_back(x0, x1, rat_element<2, 0>(area_0, area_half, area_1));
 
                     double ixa_half = ixa_0 + (x1-x0)/(pi*r0*(r0+r1));
                     double ixa_1 = ixa_0 + (x1-x0)/(pi*r0*r1);
-                    data->ixa[bid].push_back(x0, x1, rat_element<1, 1>(ixa_0, ixa_half, ixa_1));
+                    data_->ixa[bid].push_back(x0, x1, rat_element<1, 1>(ixa_0, ixa_half, ixa_1));
                 }
             }
 
-            arb_assert(data->radius[bid].size()>0);
-            arb_assert(data->radius[bid].bounds()==std::pair<double>(0., 1.));
-            arb_assert(data->area[bid].bounds()==std::pair<double>(0., 1.));
-            arb_assert(data->ixa[bid].bounds()==std::pair<double>(0., 1.));
+            arb_assert((data_->radius[bid].size()>0));
+            arb_assert((data_->radius[bid].bounds()==std::pair<double, double>(0., 1.)));
+            arb_assert((data_->area[bid].bounds()==std::pair<double, double>(0., 1.)));
+            arb_assert((data_->ixa[bid].bounds()==std::pair<double, double>(0., 1.)));
         }
     }
-}
-
-
 };
 
 } // namespace arb
-
-
-

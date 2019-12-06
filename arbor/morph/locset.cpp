@@ -2,14 +2,13 @@
 #include <iostream>
 #include <numeric>
 
-#include <arbor/morph/error.hpp>
+#include <arbor/morph/morphexcept.hpp>
+#include <arbor/morph/morphology.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/mprovider.hpp>
 
 #include "util/rangeutil.hpp"
 #include "util/strprintf.hpp"
-
-#include "morph/em_morphology.hpp"
 
 namespace arb {
 namespace ls {
@@ -106,7 +105,7 @@ locset nil() {
     return locset{nil_{}};
 }
 
-mlocation_list thingify_(const nil_& x, const mprovider& {
+mlocation_list thingify_(const nil_& x, const mprovider&) {
     return {};
 }
 
@@ -125,10 +124,10 @@ locset location(mlocation loc) {
     return locset{location_{loc}};
 }
 
-mlocation_list thingify_(const location_& x, const provider& m) {
-    assert_valid(loc);
-    if (loc.branch>=m.num_branches()) {
-        throw no_such_branch(loc.branch);
+mlocation_list thingify_(const location_& x, const mprovider& p) {
+    assert_valid(x.loc);
+    if (x.loc.branch>=p.morphology().num_branches()) {
+        throw no_such_branch(x.loc.branch);
     }
     return {x.loc};
 }
@@ -148,8 +147,8 @@ locset sample(msize_t index) {
     return locset{sample_{index}};
 }
 
-mlocation_list thingify_(const sample_& x, const em_morphology& m) {
-    return {m.sample2loc(x.index)};
+mlocation_list thingify_(const sample_& x, const mprovider& p) {
+    return {p.embedding().sample_location(x.index)};
 }
 
 std::ostream& operator<<(std::ostream& o, const sample_& x) {
@@ -164,8 +163,12 @@ locset terminal() {
     return locset{terminal_{}};
 }
 
-mlocation_list thingify_(const terminal_&, const em_morphology& m) {
-    return m.terminals();
+mlocation_list thingify_(const terminal_&, const mprovider& p) {
+    mlocation_list locs;
+    util::assign(locs, util::transform_view(p.morphology().terminal_branches(),
+        [](msize_t bid) { return mlocation{bid, 1.}; }));
+
+    return locs;
 }
 
 std::ostream& operator<<(std::ostream& o, const terminal_& x) {
@@ -180,8 +183,8 @@ locset root() {
     return locset{root_{}};
 }
 
-mlocation_list thingify_(const root_&, const em_morphology& m) {
-    return {m.root()};
+mlocation_list thingify_(const root_&, const mprovider& p) {
+    return {mlocation{0, 0.}};
 }
 
 std::ostream& operator<<(std::ostream& o, const root_& x) {
@@ -191,19 +194,19 @@ std::ostream& operator<<(std::ostream& o, const root_& x) {
 // Named locset.
 
 struct named_ {
-    const std::string& name;
+    std::string name;
 };
 
-locset named(const std::string& name) {
-    return locset(named_{name});
+locset named(std::string name) {
+    return locset(named_{std::move(name)});
 }
 
 mlocation_list thingify_(const named_& n, const mprovider& p) {
-    return p.named_locset(n.name);
+    return p.locset(n.name);
 }
 
 std::ostream& operator<<(std::ostream& o, const named_& x) {
-    return o << "(named \" << x.name << "\")";
+    return o << "(named \"" << x.name << "\")";
 }
 
 
@@ -215,8 +218,8 @@ struct land {
     land(locset lhs, locset rhs): lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 };
 
-mlocation_list thingify_(const land& P, const em_morphology& m) {
-    return intersection(thingify(P.lhs, m), thingify(P.rhs, m));
+mlocation_list thingify_(const land& P, const mprovider& p) {
+    return intersection(thingify(P.lhs, p), thingify(P.rhs, p));
 }
 
 std::ostream& operator<<(std::ostream& o, const land& x) {
@@ -231,8 +234,8 @@ struct lor {
     lor(locset lhs, locset rhs): lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 };
 
-mlocation_list thingify_(const lor& P, const em_morphology& m) {
-    return join(thingify(P.lhs, m), thingify(P.rhs, m));
+mlocation_list thingify_(const lor& P, const mprovider& p) {
+    return join(thingify(P.lhs, p), thingify(P.rhs, p));
 }
 
 std::ostream& operator<<(std::ostream& o, const lor& x) {
@@ -247,8 +250,8 @@ struct lsum {
     lsum(locset lhs, locset rhs): lhs(std::move(lhs)), rhs(std::move(rhs)) {}
 };
 
-mlocation_list thingify_(const lsum& P, const em_morphology& m) {
-    return sum(thingify(P.lhs, m), thingify(P.rhs, m));
+mlocation_list thingify_(const lsum& P, const mprovider& p) {
+    return sum(thingify(P.lhs, p), thingify(P.rhs, p));
 }
 
 std::ostream& operator<<(std::ostream& o, const lsum& x) {
@@ -277,8 +280,12 @@ locset::locset() {
     *this = ls::nil();
 }
 
-locset::locset(mlocation other) {
-    *this = ls::location(other);
+locset::locset(mlocation loc) {
+    *this = ls::location(loc);
+}
+
+locset::locset(std::string name) {
+    *this = ls::named(std::move(name));
 }
 
 } // namespace arb

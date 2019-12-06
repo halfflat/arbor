@@ -2,9 +2,9 @@
 #include <string>
 #include <vector>
 
-#include <arbor/morph/error.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/primitives.hpp>
+#include <arbor/morph/morphexcept.hpp>
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/region.hpp>
 
@@ -77,17 +77,17 @@ mlocation_list colocated(mlocation loc, const morphology& m) {
         // Include head of each branch with same parent,
         // and end of parent branch if not mnpos.
 
-        auto p = morph_.branch_parent(loc.branch);
+        auto p = m.branch_parent(loc.branch);
         if (p!=mnpos) L.push_back({p, 1});
 
-        for (auto b: morph_.branch_children(p)) {
+        for (auto b: m.branch_children(p)) {
             if (b!=loc.branch) L.push_back({b, 0});
         }
     }
     else if (loc.pos==1) {
         // Include head of each child branch.
 
-        for (auto b: morph_.branch_children(loc.branch)) {
+        for (auto b: m.branch_children(loc.branch)) {
             L.push_back({b, 0});
         }
     }
@@ -115,12 +115,20 @@ mcable_list cover(mcable_list cables, const morphology& m) {
     return L;
 }
 
+mlocation canonical(mlocation loc, const morphology& m) {
+    if (loc.pos==0) {
+        msize_t parent = m.branch_parent(loc.branch);
+        if (parent!=mnpos) return mlocation{parent, 1.};
+    }
+    return loc;
+}
+
 mcable_list remove_cover(mcable_list cables, const morphology& m) {
     // Find all zero-length cables at the end of cables, and convert to
     // their canonical representation.
     for (auto& c: cables) {
         if (c.dist_pos==0 || c.prox_pos==1) {
-            auto cloc = m.canonical(head(c));
+            auto cloc = canonical(head(c), m);
             c = {cloc.branch, cloc.pos, cloc.pos};
         }
     }
@@ -168,7 +176,7 @@ region branch(msize_t bid) {
 }
 
 mcable_list thingify_(const cable_& reg, const mprovider& p) {
-    if (reg.cable.branch>=p.morpho.num_branches()) {
+    if (reg.cable.branch>=p.morphology().num_branches()) {
         throw no_such_branch(reg.cable.branch);
     }
     return {reg.cable};
@@ -190,8 +198,9 @@ region tagged(int id) {
 }
 
 mcable_list thingify_(const tagged_& reg, const mprovider& p) {
-    size_t nb = p.num_branches();
-    auto& m = p.morphology();
+    const auto& m = p.morphology();
+    const auto& e = p.embedding();
+    size_t nb = m.num_branches();
 
     std::vector<mcable> L;
     L.reserve(nb);
@@ -223,8 +232,8 @@ mcable_list thingify_(const tagged_& reg, const mprovider& p) {
             auto first = start-1;
             auto last = std::find_if(start, end, not_matches);
 
-            auto l = first==beg? 0.: p.sample_location(*first).pos;
-            auto r = last==end?  1.: p.sample_location(*(last-1)).pos;
+            auto l = first==beg? 0.: e.sample_location(*first).pos;
+            auto r = last==end?  1.: e.sample_location(*(last-1)).pos;
             L.push_back({i, l, r});
 
             // Find the next sample in the branch that matches reg.tag.
@@ -251,7 +260,7 @@ region all() {
 }
 
 mcable_list thingify_(const all_&, const mprovider& p) {
-    auto nb = p.morpho.num_branches();
+    auto nb = p.morphology().num_branches();
     mcable_list branches;
     branches.reserve(nb);
     for (auto i: util::make_span(nb)) {
@@ -268,19 +277,19 @@ std::ostream& operator<<(std::ostream& o, const all_& t) {
 // Named region.
 
 struct named_ {
-    const std::string& name;
+    std::string name;
 };
 
-region named(const std::string& name) {
-    return region(named_{name});
+region named(std::string name) {
+    return region(named_{std::move(name)});
 }
 
 mcable_list thingify_(const named_& n, const mprovider& p) {
-    return p.named_region(n.name);
+    return p.region(n.name);
 }
 
 std::ostream& operator<<(std::ostream& o, const named_& x) {
-    return o << "(named \" << x.name << "\")";
+    return o << "(named \"" << x.name << "\")";
 }
 
 
@@ -293,7 +302,7 @@ struct reg_and {
 };
 
 mcable_list thingify_(const reg_and& P, const mprovider& p) {
-    auto& m = p.morpho;
+    auto& m = p.morphology();
 
     using cable_it = std::vector<mcable>::const_iterator;
     using cable_it_pair = std::pair<cable_it, cable_it>;
@@ -370,6 +379,10 @@ region join(region l, region r) {
 
 region::region() {
     *this = reg::nil();
+}
+
+region::region(std::string name) {
+    *this = reg::named(name);
 }
 
 } // namespace arb

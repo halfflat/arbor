@@ -44,6 +44,9 @@ public:
     // Construct an explicit location set with a single location.
     locset(mlocation other);
 
+    // Implicitly convert string to named locset expression.
+    locset(std::string label);
+
     template <typename Impl,
               typename X=std::enable_if_t<!std::is_same<std::decay_t<Impl>, locset>::value>>
     locset& operator=(Impl&& other) {
@@ -125,6 +128,9 @@ locset terminal();
 
 // The root node of a morphology.
 locset root();
+
+// Named locset.
+locset named(std::string);
 
 // The null (empty) set.
 locset nil();

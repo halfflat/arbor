@@ -117,9 +117,11 @@ set(unit_sources
     test_partition.cpp
     test_partition_by_constraint.cpp
     test_path.cpp
+    test_piecewise.cpp
     test_point.cpp
     test_probe.cpp
     test_range.cpp
+    test_ratelem.cpp
     test_segment.cpp
     test_schedule.cpp
     test_spike_source.cpp

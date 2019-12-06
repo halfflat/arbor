@@ -6,19 +6,73 @@
 // something more container/sequence-generic later.
 
 #include <initializer_list>
+#include <iterator>
+#include <type_traits>
 #include <vector>
 
+#include "util/meta.hpp"
 #include "util/partition.hpp"
 
 namespace arb {
+namespace util {
 
 using pw_size_type = unsigned;
 constexpr pw_size_type pw_npos = -1;
+
+// Generic random access const iterator for a collection
+// providing operator[].
+
+template <typename T>
+struct indexed_const_iterator {
+    using size_type = decltype(util::size(std::declval<T>()));
+    using difference_type = std::make_signed_t<size_type>;
+
+    using value_type = decltype(std::declval<T>()[0]);
+    struct pointer {
+        value_type v;
+        const value_type* operator->() const { return &v; }
+    };
+
+    using reference = value_type;
+    using iterator_category = std::random_access_iterator_tag;
+
+    const T* ptr_ = nullptr;
+    size_type i_ = 0;
+
+    bool operator==(indexed_const_iterator x) const { return ptr_ == x.ptr_ && i_ == ptr_.i_; }
+    bool operator!=(indexed_const_iterator x) const { return !(*this==x); }
+    bool operator<=(indexed_const_iterator x) const { return i_<=x.i_; }
+    bool operator<(indexed_const_iterator x)  const { return i_<x.i_; }
+    bool operator>=(indexed_const_iterator x) const { return i_>=x.i_; }
+    bool operator>(indexed_const_iterator x)  const { return i_>x.i_; }
+
+    difference_type operator-(indexed_const_iterator x) const { return i_-x.i_; }
+    indexed_const_iterator& operator++() { return ++i_, *this; }
+    indexed_const_iterator& operator--() { return --i_, *this; }
+    indexed_const_iterator operator++(int) { auto x = *this; return ++i_, x; }
+    indexed_const_iterator operator--(int) { auto x = *this; return --i_, x; }
+
+    indexed_const_iterator operator+(difference_type n) { return indexed_const_iterator{ptr_, i_+n}; }
+    indexed_const_iterator operator-(difference_type n) { return indexed_const_iterator{ptr_, i_-n}; }
+    indexed_const_iterator& operator+=(difference_type n) { return i_+=n, *this; }
+    indexed_const_iterator& operator-=(difference_type n) { return i_-=n, *this; }
+
+    friend indexed_const_iterator operator+(difference_type n, indexed_const_iterator x) {
+        indexed_const_iterator r(std::move(x));
+        return r+=n;
+    }
+
+    reference operator*() const { return (*ptr_)[i_]; }
+    pointer operator->() const { return pointer{(*ptr_)[i_]}; }
+};
+
 
 template <typename X = void>
 struct pw_elements {
     using size_type = pw_size_type;
     static constexpr size_type npos = pw_npos;
+
+    using value_type = std::pair<std::pair<double, double>, X>;
 
     // Consistency requirements:
     // 1. empty() || element.size()+1 = vertex.size()
@@ -27,7 +81,7 @@ struct pw_elements {
     std::vector<double> vertex_;
     std::vector<X> element_;
 
-    // ctors and assignment:
+    // Ctors and assignment:
 
     pw_elements() = default;
 
@@ -51,7 +105,7 @@ struct pw_elements {
     pw_elements& operator=(pw_elements&&) = default;
     pw_elements& operator=(const pw_elements&) = default;
 
-    // access:
+    // Access:
 
     auto intervals() const { return util::partition_view(vertex_); }
     auto interval(size_type i) const { return intervals()[i]; }
@@ -72,12 +126,17 @@ struct pw_elements {
 
     X& element(size_type i) & { return element_[i]; }
     const X& element(size_type i) const & { return element_[i]; }
+    value_type operator[](size_type i) const { return value_type{interval(i), element(i)}; }
 
-    // TODO: change this (and add const iterators) to return by
-    // value a pair of element and bounds?
+    using const_iterator = indexed_const_iterator<pw_elements<X>>;
+    using iterator = const_iterator;
 
-    X& operator[](size_type i) { return element(i); }
-    const X& operator[](size_type i) const { return element(i); }
+    const_iterator cbegin() const { return const_iterator{this, 0}; }
+    const_iterator begin() const { return cbegin(); }
+    const_iterator cend() const { return const_iterator{this, size()}; }
+    const_iterator end() const { return cend(); }
+    value_type front() const { return (*this)[0]; }
+    value_type back() const { return (*this)[size()-1]; }
 
     size_type index_of(double x) const {
         if (empty()) return npos;
@@ -182,6 +241,8 @@ template <> struct pw_elements<void> {
 
     std::vector<double> vertex_;
 
+    using value_type = std::pair<double, double>;
+
     // ctors and assignment:
 
     template <typename VSeq>
@@ -204,6 +265,7 @@ template <> struct pw_elements<void> {
 
     auto intervals() const { return util::partition_view(vertex_); }
     auto interval(size_type i) const { return intervals()[i]; }
+    value_type operator[](size_type i) const { return interval(i); }
 
     auto bounds() const { return intervals().bounds(); }
 
@@ -222,6 +284,16 @@ template <> struct pw_elements<void> {
         if (x == partn.bounds().second) return size()-1;
         else return partn.index(x);
     }
+
+    using const_iterator = indexed_const_iterator<pw_elements<void>>;
+    using iterator = const_iterator;
+
+    const_iterator cbegin() const { return const_iterator{this, 0}; }
+    const_iterator begin() const { return cbegin(); }
+    const_iterator cend() const { return const_iterator{this, size()}; }
+    const_iterator end() const { return cend(); }
+    value_type front() const { return (*this)[0]; }
+    value_type back() const { return (*this)[size()-1]; }
 
     // mutating operations:
 
@@ -380,4 +452,5 @@ pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elemen
     return m;
 }
 
+} // namespace util
 } // namespace arb

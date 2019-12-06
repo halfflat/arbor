@@ -52,6 +52,9 @@ public:
         return *this;
     }
 
+    // Implicitly convert string to named region expression.
+    region(std::string label);
+
     friend mcable_list thingify(const region& r, const mprovider& m) {
         return r.impl_->thingify(m);
     }

@@ -12,20 +12,20 @@ namespace arb {
 struct embed_pwlin1d_data;
 
 namespace util {
-template <typename X> struct piecewise;
+template <typename X> struct pw_elements;
 }
 
-struct embed_pwlin1d {
-    explicit embed_pw1d(const arb::morphology& m);
+using pw_constant_fn = util::pw_elements<double>;
 
-    mlocation sample_location(msize_t sid) {
+struct embed_pwlin1d {
+    explicit embed_pwlin1d(const arb::morphology& m);
+
+    mlocation sample_location(msize_t sid) const {
         return sample_locations_.at(sid);
     }
 
     // Interpolated radius at location.
     double radius(mlocation) const;
-
-    using pw_constant_fn = piecewise<double>;
 
     // Computed length of mcable.
     double integrate_length(mcable c) const;

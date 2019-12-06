@@ -9,6 +9,7 @@
 #include <arbor/constants.hpp>
 #include <arbor/mechcat.hpp>
 #include <arbor/morph/label_dict.hpp>
+#include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/primitives.hpp>
 #include <arbor/segment.hpp>
@@ -63,6 +64,7 @@ public:
         double threshold;
     };
 
+    cable_cell_parameter_set default_parameters;
 
     /// Default constructor
     cable_cell();
@@ -78,8 +80,9 @@ public:
                const label_dict& dictionary={},
                bool compartments_from_discretization=false);
 
-    /// Access to concrete regions, locsets, and (embedded) morphology.
-    const mprovider& embedding();
+    /// Access to morphology and embedding
+    const concrete_embedding& embedding() const;
+    const arb::morphology& morphology() const;
 
     // the number of branches in the cell
     size_type num_branches() const;
@@ -125,27 +128,27 @@ public:
     //
 
     // Density channels.
-    void paint(const std::string&, mechanism_desc);
+//    void paint(const std::string&, mechanism_desc);
     void paint(const region&, mechanism_desc);
 
     // Properties.
-    void paint(const std::string&, cable_cell_local_parameter_set);
+//    void paint(const std::string&, cable_cell_local_parameter_set);
     void paint(const region&, cable_cell_local_parameter_set);
 
     // Synapses.
-    lid_range place(const std::string&, const mechanism_desc&);
+   // lid_range place(const std::string&, const mechanism_desc&);
     lid_range place(const locset&, const mechanism_desc&);
 
     // Stimuli.
-    lid_range place(const std::string&, const i_clamp&);
+  //  lid_range place(const std::string&, const i_clamp&);
     lid_range place(const locset&, const i_clamp&);
 
     // Gap junctions.
-    lid_range place(const std::string&, gap_junction_site);
+ //   lid_range place(const std::string&, gap_junction_site);
     lid_range place(const locset&, gap_junction_site);
 
     // spike detectors
-    lid_range place(const std::string&, const threshold_detector&);
+//    lid_range place(const std::string&, const threshold_detector&);
     lid_range place(const locset&, const threshold_detector&);
 
     //
