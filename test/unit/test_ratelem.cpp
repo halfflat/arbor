@@ -34,7 +34,7 @@ TEST(ratelem, direct_ctor) {
     EXPECT_EQ(3u, x20.size());
     EXPECT_EQ(3., x20[0]);
     EXPECT_EQ(2., x20[1]);
-    EXPECT_EQ(2., x20[2]);
+    EXPECT_EQ(4., x20[2]);
 }
 
 TEST(ratelem, fn_ctor) {
@@ -43,8 +43,8 @@ TEST(ratelem, fn_ctor) {
     rat_element<0, 0> x00(f);
     EXPECT_EQ(1., x00[0]);
 
-    rat_element<1, 2> x12(f);
-    EXPECT_EQ(f(0.09), x12[0]);
+    rat_element<1, 3> x12(f);
+    EXPECT_EQ(f(0.00), x12[0]);
     EXPECT_EQ(f(0.25), x12[1]);
     EXPECT_EQ(f(0.50), x12[2]);
     EXPECT_EQ(f(0.75), x12[3]);
