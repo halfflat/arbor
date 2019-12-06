@@ -161,7 +161,7 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
                 for (auto i: util::count_along(sample_indices)) {
                     if (!i) continue;
 
-                    double x0 = sample_locations_[sample_indices[i-1]].pos;
+                    double x0 = i>1? sample_locations_[sample_indices[i-1]].pos: 0;
                     double x1 = sample_locations_[sample_indices[i]].pos;
                     if (x0==x1) continue;
 
