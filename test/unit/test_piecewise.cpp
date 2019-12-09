@@ -7,6 +7,7 @@
 
 using namespace arb;
 using util::pw_elements;
+using util::pw_element;
 using util::pw_npos;
 
 TEST(piecewise, eq) {
@@ -273,7 +274,7 @@ TEST(piecewise, push_void) {
     EXPECT_THROW(p.push_back(0.7, 0.9), std::runtime_error);
 }
 
-TEST(piecewise, meet) {
+TEST(piecewise, zip) {
     pw_elements<int> p03;
     p03.assign((double [3]){0., 1.5, 3.}, (int [2]){10, 11});
 
@@ -281,31 +282,51 @@ TEST(piecewise, meet) {
     p14.assign((double [5]){1, 2.25, 3., 3.5, 4.}, (int [4]){3, 4, 5, 6});
 
     using ii = std::pair<int, int>;
-    pw_elements<ii> p03_14 = meet(p03, p14);
+    pw_elements<ii> p03_14 = zip(p03, p14);
     EXPECT_EQ(1., p03_14.bounds().first);
     EXPECT_EQ(3., p03_14.bounds().second);
 
     EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), p03_14.vertices());
     EXPECT_EQ((std::vector<ii>{ii(10, 3), ii(11, 3), ii(11, 4)}), p03_14.elements());
 
-    pw_elements<ii> p14_03 = meet(p14, p03);
+    pw_elements<ii> p14_03 = zip(p14, p03);
     EXPECT_EQ(p03_14.vertices(), p14_03.vertices());
 
     std::vector<ii> flipped = util::assign_from(util::transform_view(p14_03.elements(),
         [](ii p) { return ii{p.second, p.first}; }));
     EXPECT_EQ(p03_14.elements(), flipped);
+
+    pw_elements<> v03;
+    v03.assign((double [3]){0., 1.5, 3.});
+
+    EXPECT_EQ((std::vector<int>{3, 3, 4}), zip(v03, p14).elements());
+    EXPECT_EQ((std::vector<int>{3, 3, 4}), zip(p14, v03).elements());
+
+    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), zip(v03, p14).vertices());
+    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), zip(p14, v03).vertices());
+
+    auto project = [](double l, double r, pw_element<void>, const pw_element<int>& b) -> double {
+        double b_width = b.first.second-b.first.first;
+        return result = b.second*(r-l)/b_width;
+    };
+
+    pw_elements<void> vxx; // elements cover bounds of p14
+    vxx.assign((double [6]){0.2, 1.7, 1.95, 2.325, 2.45, 4.9});
+
+    pw_elements<double> pxx = zip(vxx, p14, project);
+    double p14_sum = util::sum(util::transform_view(p14, [](auto v) { return v.second; }));
+    double pxx_sum = util::sum(util::transform_view(pxx, [](auto v) { return v.second; }));
+    EXPECT_DOUBLE_EQ(p14_sum, pxx_sum);
+
 }
 
-TEST(piecewise, meet_void) {
+TEST(piecewise, zip_void) {
     pw_elements<> p03;
     p03.assign((double [3]){0., 1.5, 3.});
 
-    pw_elements<int> p14;
-    p14.assign((double [5]){1, 2.25, 3., 3.5, 4.}, (int [4]){3, 4, 5, 6});
+    pw_elements<> p14;
+    p14.assign((double [5]){1, 2.25, 3., 3.5, 4.});
 
-    EXPECT_EQ((std::vector<int>{3, 3, 4}), meet(p03, p14).elements());
-    EXPECT_EQ((std::vector<int>{3, 3, 4}), meet(p14, p03).elements());
-
-    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), meet(p03, p14).vertices());
-    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), meet(p14, p03).vertices());
+    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), zip(p03, p14).vertices());
+    EXPECT_EQ((std::vector<double>{1., 1.5, 2.25, 3.}), zip(p14, p03).vertices());
 }

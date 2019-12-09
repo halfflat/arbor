@@ -354,82 +354,69 @@ template <> struct pw_elements<void> {
     }
 };
 
+template <typename X>
+using pw_element = typename pw_elements<X>::value_type;
 
 namespace impl {
-    template <typename A, typename B> 
-    struct pair_type_map { using type = std::pair<A, B>; };
-
-    template <typename A>
-    struct pair_type_map<A, void> { using type = A; };
-
-    template <typename B>
-    struct pair_type_map<void, B> { using type = B; };
-
-    template <>
-    struct pair_type_map<void, void> { using type = void; };
-
     template <typename A, typename B>
-    using pair_type = typename pair_type_map<A, B>::type;
+    struct piecewise_pairify {
+        std::pair<A, B> operator()(
+            double left, double right,
+            const pw_element<A> a_elem,
+            const pw_element<B> b_elem) const
+         {
+            return {a_elem.second, b_elem.second};
+        }
+    };
 
-    template <typename A, typename B>
-    void general_pw_push_pair(
-        pw_elements<std::pair<A, B>>& out,
-        double left, double right,
-        const pw_elements<A>& a, pw_size_type ai,
-        const pw_elements<B>& b, pw_size_type bi)
-    {
-        out.push_back(left, right, std::pair<A, B>{a.element(ai), b.element(bi)});
-    }
+    template <typename X>
+    struct piecewise_pairify<X, void> {
+        X operator()(
+            double left, double right,
+            const pw_element<X> a_elem,
+            const pw_element<void> b_elem) const
+        {
+            return a_elem.second;
+        }
+    };
 
-    template <typename A>
-    void general_pw_push_pair(
-        pw_elements<A>& out,
-        double left, double right,
-        const pw_elements<A>& a, pw_size_type ai,
-        const pw_elements<void>& b, pw_size_type bi)
-    {
-        out.push_back(left, right, a.element(ai));
-    }
-
-    template <typename B>
-    void general_pw_push_pair(
-        pw_elements<B>& out,
-        double left, double right,
-        const pw_elements<void>& a, pw_size_type ai,
-        const pw_elements<B>& b, pw_size_type bi)
-    {
-        out.push_back(left, right, b.element(bi));
-    }
-
-    inline void general_pw_push_pair(
-        pw_elements<void>& out,
-        double left, double right,
-        const pw_elements<void>& a, pw_size_type ai,
-        const pw_elements<void>& b, pw_size_type bi)
-    {
-        out.push_back(left, right);
-    }
+    template <typename X>
+    struct piecewise_pairify<void, X> {
+        X operator()(
+            double left, double right,
+            const pw_element<void> a_elem,
+            const pw_element<X> b_elem) const
+        {
+            return b_elem.second;
+        }
+    };
 }
 
-// TODO: Consider making a lazy `meet_view` version of meet.
+// TODO: Consider making a lazy `zip_view` version of zip.
 
-template <typename A, typename B>
-pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elements<B>& b) {
-    pw_elements<impl::pair_type<A, B>> m;
+// Combine functional takes four arguments: 
+//     double left, double right, pw_elements<A>::value_type, pw_elements<B>::value_type b>
+//
+// Default combine functional returns std::pair<A, B>, unless one of A and B is void.
 
-    if (a.empty() || b.empty()) return m;
+template <typename A, typename B, typename Combine = impl::piecewise_pairify<A, B>>
+auto zip(const pw_elements<A>& a, const pw_elements<B>& b, Combine combine = {})
+{
+    using Out = decltype(combine(0., 0., a.front(), b.front()));
+    pw_elements<Out> z;
+    if (a.empty() || b.empty()) return z;
 
     double lmax = std::max(a.bounds().first, b.bounds().first);
     double rmin = std::min(a.bounds().second, b.bounds().second);
-    if (rmin<lmax) return m;
+    if (rmin<lmax) return z;
 
     double left = lmax;
     pw_size_type ai = a.intervals().index(left);
     pw_size_type bi = b.intervals().index(left);
 
     if (rmin==left) {
-        impl::general_pw_push_pair(m, left, left, a, ai, b, bi);
-        return m;
+        z.push_back(left, left, combine(left, left, a[ai], b[bi]));
+        return z;
     }
 
     double a_right = a.interval(ai).second;
@@ -439,7 +426,7 @@ pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elemen
         double right = std::min(a_right, b_right);
         right = std::min(right, rmin);
 
-        impl::general_pw_push_pair(m, left, right, a, ai, b, bi);
+        z.push_back(left, right, combine(left, right, a[ai], b[bi]));
         if (a_right<=right) {
             a_right = a.interval(++ai).second;
         }
@@ -449,8 +436,46 @@ pw_elements<impl::pair_type<A, B>> meet(const pw_elements<A>& a, const pw_elemen
 
         left = right;
     }
-    return m;
+    return z;
 }
+
+inline pw_elements<void> zip(const pw_elements<void>& a, const pw_elements<void>& b) {
+    pw_elements<void> z;
+    if (a.empty() || b.empty()) return z;
+
+    double lmax = std::max(a.bounds().first, b.bounds().first);
+    double rmin = std::min(a.bounds().second, b.bounds().second);
+    if (rmin<lmax) return z;
+
+    double left = lmax;
+    pw_size_type ai = a.intervals().index(left);
+    pw_size_type bi = b.intervals().index(left);
+
+    if (rmin==left) {
+        z.push_back(left, left);
+        return z;
+    }
+
+    double a_right = a.interval(ai).second;
+    double b_right = b.interval(bi).second;
+
+    while (left<rmin) {
+        double right = std::min(a_right, b_right);
+        right = std::min(right, rmin);
+
+        z.push_back(left, right);
+        if (a_right<=right) {
+            a_right = a.interval(++ai).second;
+        }
+        if (b_right<=right) {
+            b_right = b.interval(++bi).second;
+        }
+
+        left = right;
+    }
+    return z;
+}
+
 
 } // namespace util
 } // namespace arb
