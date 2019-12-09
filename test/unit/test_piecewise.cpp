@@ -307,7 +307,7 @@ TEST(piecewise, zip) {
 
     auto project = [](double l, double r, pw_element<void>, const pw_element<int>& b) -> double {
         double b_width = b.first.second-b.first.first;
-        return result = b.second*(r-l)/b_width;
+        return b.second*(r-l)/b_width;
     };
 
     pw_elements<void> vxx; // elements cover bounds of p14

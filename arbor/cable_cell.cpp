@@ -99,16 +99,6 @@ struct cable_cell_impl {
                 segments.back()->as_cable()->set_compartments(ncomp);
             }
         }
-
-#if 0
-        for (auto& r: dictionary.regions()) {
-            regions[r.first] = thingify(r.second, morph);
-        }
-
-        for (auto& l: dictionary.locsets()) {
-            locations[l.first] = thingify(l.second, morph);
-        }
-#endif
     }
 
     cable_cell_impl(): cable_cell_impl({},{},false) {}
@@ -121,12 +111,6 @@ struct cable_cell_impl {
         spike_detectors(other.spike_detectors),
         provider(other.provider)
     {
-#if 0
-        regions = other.regions;
-        morph = other.morph;
-        locations = other.locations;
-#endif
-
         // unique_ptr's cannot be copy constructed, do a manual assignment
         segments.reserve(other.segments.size());
         for (const auto& s: other.segments) {
@@ -154,14 +138,6 @@ struct cable_cell_impl {
     // the sensors
     std::vector<detector_instance> spike_detectors;
 
-#if 0
-    // Named regions
-    region_map regions;
-
-    // Named location sets
-    locset_map locations;
-#endif
-
     // Embedded morphology and labelled region/locset lookup.
     mprovider provider;
 
@@ -182,18 +158,6 @@ struct cable_cell_impl {
         return place(thingify(locs, provider), desc, list);
     }
 
-#if 0
-    template <typename Desc, typename T>
-    lid_range place(const std::string& target, const Desc& desc, std::vector<T>& list) {
-        const auto first = list.size();
-
-        const auto it = locations.find(target);
-        if (it==locations.end()) return lid_range(first, first);
-
-        return place(it->second, desc, list);
-    }
-#endif
-
     lid_range place_gj(const mlocation_list& locs) {
         const auto first = gap_junction_sites.size();
 
@@ -206,17 +170,6 @@ struct cable_cell_impl {
         return place_gj(thingify(locs, provider));
     }
 
-#if 0
-    lid_range place_gj(const std::string& target) {
-        const auto first = gap_junction_sites.size();
-
-        const auto it = locations.find(target);
-        if (it==locations.end()) return lid_range(first, first);
-
-        return place_gj(it->second);
-    }
-#endif
-
     void assert_valid_segment(index_type i) const {
         if (i>=segments.size()) {
             throw cable_cell_error("no such segment");
@@ -226,18 +179,6 @@ struct cable_cell_impl {
     bool valid_location(const mlocation& loc) const {
         return test_invariants(loc) && loc.branch<segments.size();
     }
-
-#if 0
-    template <typename F>
-    void paint(const std::string& target, F&& f) {
-        auto it = regions.find(target);
-
-        // Nothing to do if there are no regions that match.
-        if (it==regions.end()) return;
-
-        paint(it->second, std::forward<F>(f));
-    }
-#endif
 
     template <typename F>
     void paint(const mcable_list& cables, F&& f) {
@@ -344,18 +285,6 @@ const mprovider& cable_cell::provider() const {
 // Implementation of user API for painting density channel and electrical properties on cells.
 //
 
-#if 0
-void cable_cell::paint(const std::string& target, mechanism_desc desc) {
-    impl_->paint(target,
-                 [&desc](segment_ptr& s){return s->add_mechanism(desc);});
-}
-
-void cable_cell::paint(const std::string& target, cable_cell_local_parameter_set params) {
-    impl_->paint(target,
-                 [&params](segment_ptr& s){return s->parameters = params;});
-}
-#endif
-
 void cable_cell::paint(const region& target, mechanism_desc desc) {
     impl_->paint(target,
                  [&desc](segment_ptr& s){return s->add_mechanism(desc);});
@@ -377,12 +306,6 @@ void cable_cell::paint(const region& target, cable_cell_local_parameter_set para
 // Synapses.
 //
 
-#if 0
-lid_range cable_cell::place(const std::string& target, const mechanism_desc& desc) {
-    return impl_->place(target, desc, impl_->synapses);
-}
-#endif
-
 lid_range cable_cell::place(const locset& ls, const mechanism_desc& desc) {
     return impl_->place(ls, desc, impl_->synapses);
 }
@@ -390,12 +313,6 @@ lid_range cable_cell::place(const locset& ls, const mechanism_desc& desc) {
 //
 // Stimuli.
 //
-
-#if 0
-lid_range cable_cell::place(const std::string& target, const i_clamp& desc) {
-    return impl_->place(target, desc, impl_->stimuli);
-}
-#endif
 
 lid_range cable_cell::place(const locset& ls, const i_clamp& desc) {
     return impl_->place(ls, desc, impl_->stimuli);
@@ -405,12 +322,6 @@ lid_range cable_cell::place(const locset& ls, const i_clamp& desc) {
 // Gap junctions.
 //
 
-#if 0
-lid_range cable_cell::place(const std::string& target, gap_junction_site) {
-    return impl_->place_gj(target);
-}
-#endif
-
 lid_range cable_cell::place(const locset& ls, gap_junction_site) {
     return impl_->place_gj(ls);
 }
@@ -418,11 +329,6 @@ lid_range cable_cell::place(const locset& ls, gap_junction_site) {
 //
 // Spike detectors.
 //
-#if 0
-lid_range cable_cell::place(const std::string& target, const threshold_detector& desc) {
-    return impl_->place(target, desc.threshold, impl_->spike_detectors);
-}
-#endif
 
 lid_range cable_cell::place(const locset& ls, const threshold_detector& desc) {
     return impl_->place(ls, desc.threshold, impl_->spike_detectors);

@@ -12,6 +12,10 @@
 // S. L. Loi and A. W. McInnes (1983). An algorithm for generalized
 // rational interpolation. BIT Numerical Mathematics 23(1),
 // pp. 105–117. doi:10.1007/BF01937330
+//
+// Current implementation should be sufficient for interpolation of
+// monotonic ratpoly functions of low order, but we can revisit
+// this is if the limitations of the Larkin method bite us.
 
 #include <algorithm>
 #include <array>
@@ -64,6 +68,9 @@ struct rat_eval {
                 h[i] = ook*((x - i)*g[i+1] + (i+k - x)*g[i]);
             }
             else {
+                // Using h[i] = k/(g[i+1]/(x - i) + g[i]/(i+k - x)) is more robust to
+                // singularities, but the expense should not be necessary if we stick
+                // to strictly monotonic elements for rational polynomials.
                 h[i] = k*g[i]*g[i+1]/(g[i]*(x - i) + g[i+1]*(i+k - x));
             }
         }

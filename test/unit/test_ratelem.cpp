@@ -51,3 +51,65 @@ TEST(ratelem, fn_ctor) {
     EXPECT_EQ(f(1.00), x12[4]);
 }
 
+
+TEST(ratelem, constants) {
+    // (Only expect this to work for polynomial interpolators).
+    auto k = [](double c) { return [c](double x) { return c; }; };
+
+    rat_element<0, 0> k00(k(2.));
+    rat_element<1, 0> k10(k(3.));
+    rat_element<2, 0> k20(k(4.));
+    rat_element<3, 0> k30(k(5.));
+
+    double xs[] = {0., 0.1, 0.3, 0.5, 0.7, 0.9, 1.};
+    for (auto x: xs) {
+        EXPECT_DOUBLE_EQ(2., k00(x));
+        EXPECT_DOUBLE_EQ(3., k10(x));
+        EXPECT_DOUBLE_EQ(4., k20(x));
+        EXPECT_DOUBLE_EQ(5., k30(x));
+    }
+}
+
+template <unsigned p_, unsigned q_>
+struct wrap_pq {
+    static constexpr unsigned p = p_;
+    static constexpr unsigned q = q_;
+};
+
+template <typename PQ>
+struct ratelem_pq: public testing::Test {};
+
+using pq_types = ::testing::Types<
+    wrap_pq<0, 0>, wrap_pq<1, 0>, wrap_pq<2, 0>, wrap_pq<3, 0>,
+    wrap_pq<0, 1>, wrap_pq<1, 1>, wrap_pq<2, 1>, wrap_pq<3, 1>,
+    wrap_pq<0, 2>, wrap_pq<1, 2>, wrap_pq<2, 2>, wrap_pq<3, 2>
+>;
+
+// Compute 1+x+x^2+...+x^n
+template <unsigned n>
+constexpr double upoly(double x) { return x*upoly<n-1>(x)+1.; }
+
+template <>
+constexpr double upoly<0>(double x) { return 1.; }
+
+TYPED_TEST_CASE(ratelem_pq, pq_types);
+
+TYPED_TEST(ratelem_pq, interpolate_monotonic) {
+    constexpr unsigned p = TypeParam::p;
+    constexpr unsigned q = TypeParam::q;
+
+    // Pick f to have irreducible order p, q.
+    auto f = [](double x) { return upoly<p>(x)/upoly<q>(2*x); };
+    rat_element<p, q> fpq(f);
+
+    // Check values both on and off nodes.
+    for (unsigned i = 0; i<=1+p+q; ++i) {
+        double x = (double)i/(1+p+q);
+        EXPECT_DOUBLE_EQ(f(x), fpq(x));
+    }
+
+    for (unsigned i = 1; i<p+q; ++i) {
+        double x = (double)i/(p+q);
+        EXPECT_DOUBLE_EQ(f(x), fpq(x));
+    }
+}
