@@ -111,6 +111,8 @@ set(unit_sources
     test_merge_events.cpp
     test_morphology.cpp
     test_morph_embedding.cpp
+    test_morph_expr.cpp
+    test_morph_primitives.cpp
     test_multi_event_stream.cpp
     test_optional.cpp
     test_padded.cpp

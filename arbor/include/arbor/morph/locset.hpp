@@ -46,6 +46,7 @@ public:
 
     // Implicitly convert string to named locset expression.
     locset(std::string label);
+    locset(const char* label);
 
     template <typename Impl,
               typename X=std::enable_if_t<!std::is_same<std::decay_t<Impl>, locset>::value>>

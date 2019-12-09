@@ -163,22 +163,26 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
                 for (auto i: util::count_along(sample_indices)) {
                     if (!i) continue;
 
-                    double x0 = i>1? sample_locations_[sample_indices[i-1]].pos: 0;
-                    double x1 = sample_locations_[sample_indices[i]].pos;
-                    if (x0==x1) continue;
+                    double p0 = i>1? sample_locations_[sample_indices[i-1]].pos: 0;
+                    double p1 = sample_locations_[sample_indices[i]].pos;
+                    if (p0==p1) continue;
 
                     double r0 = samples[sample_indices[i-1]].loc.radius;
                     double r1 = samples[sample_indices[i]].loc.radius;
-                    data_->radius[bid].push_back(x0, x1, rat_element<1, 0>(r0, r1));
+                    data_->radius[bid].push_back(p0, p1, rat_element<1, 0>(r0, r1));
 
-                    double c = pi*std::sqrt((r1-r0)*(r1-r0)+(x1-x0)*(x1-x0));
+                    double dx = (p1-p0)*branch_length;
+                    double dr = r1-r0;
+                    double c = pi*std::sqrt(dr*dr+dx*dx);
                     double area_half = area_0 + (0.75*r0+0.25*r1)*c;
                     double area_1 = area_0 + (r0+r1)*c;
-                    data_->area[bid].push_back(x0, x1, rat_element<2, 0>(area_0, area_half, area_1));
+                    data_->area[bid].push_back(p0, p1, rat_element<2, 0>(area_0, area_half, area_1));
+                    area_0 = area_1;
 
-                    double ixa_half = ixa_0 + (x1-x0)/(pi*r0*(r0+r1));
-                    double ixa_1 = ixa_0 + (x1-x0)/(pi*r0*r1);
-                    data_->ixa[bid].push_back(x0, x1, rat_element<1, 1>(ixa_0, ixa_half, ixa_1));
+                    double ixa_half = ixa_0 + dx/(pi*r0*(r0+r1));
+                    double ixa_1 = ixa_0 + dx/(pi*r0*r1);
+                    data_->ixa[bid].push_back(p0, p1, rat_element<1, 1>(ixa_0, ixa_half, ixa_1));
+                    ixa_0 = ixa_1;
                 }
             }
 
