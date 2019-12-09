@@ -628,25 +628,25 @@ TEST(morphology, minset) {
     {
         arb::morphology m(sm, false);
 
-        EXPECT_EQ((ll{}), minset(ll{}, m));
-        EXPECT_EQ((ll{{2,0.1}}), minset(ll{{2,0.1}}, m));
-        EXPECT_EQ((ll{{0,0.5}, {1,0.5}}), minset(ll{{0,0.5}, {1,0.5}}, m));
-        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}}, m));
-        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}, m));
-        EXPECT_EQ((ll{{0,0}, {1,0.5}}), minset(ll{{0,0}, {0,0.5}, {1,0.5}, {2,0.5}}, m));
-        EXPECT_EQ((ll{{0,0}, {2,0.5}}), minset(ll{{0,0}, {0,0.5}, {2,0.5}}, m));
-        EXPECT_EQ((ll{{0,0}, {2,0.5}, {3,0}}), minset(ll{{0,0}, {0,0.5}, {2,0.5}, {3,0}, {3,1}}, m));
-        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {2,0.5}, {3,0}, {3,1}}, m));
+        EXPECT_EQ((ll{}), minset(m, ll{}));
+        EXPECT_EQ((ll{{2,0.1}}), minset(m, ll{{2,0.1}}));
+        EXPECT_EQ((ll{{0,0.5}, {1,0.5}}), minset(m, ll{{0,0.5}, {1,0.5}}));
+        EXPECT_EQ((ll{{0,0.5}}), minset(m, ll{{0,0.5}}));
+        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(m, ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}));
+        EXPECT_EQ((ll{{0,0}, {1,0.5}}), minset(m, ll{{0,0}, {0,0.5}, {1,0.5}, {2,0.5}}));
+        EXPECT_EQ((ll{{0,0}, {2,0.5}}), minset(m, ll{{0,0}, {0,0.5}, {2,0.5}}));
+        EXPECT_EQ((ll{{0,0}, {2,0.5}, {3,0}}), minset(m, ll{{0,0}, {0,0.5}, {2,0.5}, {3,0}, {3,1}}));
+        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(m, ll{{0,0}, {0,0.5}, {1,0}, {2,0.5}, {3,0}, {3,1}}));
     }
     {
         arb::morphology m(sm, true);
 
-        EXPECT_EQ((ll{}), minset(ll{}, m));
-        EXPECT_EQ((ll{{2,0.1}}), minset(ll{{2,0.1}}, m));
-        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}, {1,0.5}}, m));
-        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}}, m));
-        EXPECT_EQ((ll{{0,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}, m));
-        EXPECT_EQ((ll{{1,0.5}, {3,0.1}, {4,0.5}}), minset(ll{{1,0.5}, {1,1}, {3,0.1}, {4,0.5}, {4,0.7}}, m));
+        EXPECT_EQ((ll{}), minset(m, ll{}));
+        EXPECT_EQ((ll{{2,0.1}}), minset(m, ll{{2,0.1}}));
+        EXPECT_EQ((ll{{0,0.5}}), minset(m, ll{{0,0.5}, {1,0.5}}));
+        EXPECT_EQ((ll{{0,0.5}}), minset(m, ll{{0,0.5}}));
+        EXPECT_EQ((ll{{0,0}}), minset(m, ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}));
+        EXPECT_EQ((ll{{1,0.5}, {3,0.1}, {4,0.5}}), minset(m, ll{{1,0.5}, {1,1}, {3,0.1}, {4,0.5}, {4,0.7}}));
     }
 }
 

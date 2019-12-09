@@ -237,13 +237,13 @@ std::ostream& operator<<(std::ostream& o, const morphology& m) {
 
 // Utilities.
 
-mlocation_list minset(const mlocation_list& in, const morphology& morph) {
+mlocation_list minset(const morphology& m, const mlocation_list& in) {
     mlocation_list L;
 
     std::stack<msize_t> stack;
 
     // All root branches must be searched.
-    for (auto c: morph.branch_children(mnpos)) {
+    for (auto c: m.branch_children(mnpos)) {
         stack.push(c);
     }
 
@@ -262,7 +262,7 @@ mlocation_list minset(const mlocation_list& in, const morphology& morph) {
         }
 
         // No location on this branch, so continue searching in this sub-tree.
-        for (auto c: morph.branch_children(branch)) {
+        for (auto c: m.branch_children(branch)) {
             stack.push(c);
         }
     }
@@ -271,6 +271,13 @@ mlocation_list minset(const mlocation_list& in, const morphology& morph) {
     return L;
 }
 
+mlocation canonical(const morphology& m, mlocation loc) {
+    if (loc.pos==0) {
+        msize_t parent = m.branch_parent(loc.branch);
+        return parent==mnpos? mlocation{0, 0.}: mlocation{parent, 1.};
+    }
+    return loc;
+}
 
 } // namespace arb
 

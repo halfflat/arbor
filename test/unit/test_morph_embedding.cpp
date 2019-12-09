@@ -1,6 +1,141 @@
-/*
- * Unit tests for em_morphology, region, locset, label_dict.
- */
+#include "../test/gtest.h"
+
+#include <vector>
+
+#include <arbor/morph/embed_pwlin1d.hpp>
+#include <arbor/morph/morphology.hpp>
+#include <arbor/morph/primitives.hpp>
+#include <arbor/morph/sample_tree.hpp>
+
+using namespace arb;
+using embedding = embed_pwlin1d;
+
+::testing::AssertionResult location_eq(const morphology& m, mlocation a, mlocation b) {
+    a = canonical(m, a);
+    b = canonical(m, b);
+
+    if (a.branch!=b.branch) {
+        return ::testing::AssertionFailure()
+            << "branch ids " << a.branch << " and " << b.branch << " differ";
+    }
+
+    using FP = testing::internal::FloatingPoint<double>;
+    if (FP(a.pos).AlmostEquals(FP(b.pos))) {
+        return ::testing::AssertionSuccess();
+    }
+    else {
+        return ::testing::AssertionFailure()
+            << "location positions " << a.pos << " and " << b.pos << " differ";
+    }
+}
+
+TEST(embedding, samples_and_branch_length) {
+    using pvec = std::vector<msize_t>;
+    using svec = std::vector<msample>;
+    using loc = mlocation;
+
+    // A single unbranched cable with 5 sample points.
+    // The cable has length 10 μm, with samples located at
+    // 0 μm, 1 μm, 3 μm, 7 μm and 10 μm.
+    {
+        pvec parents = {mnpos, 0, 1, 2, 3};
+        svec samples = {
+            {{  0,  0,  0,  2}, 1},
+            {{  1,  0,  0,  2}, 1},
+            {{  3,  0,  0,  2}, 1},
+            {{  7,  0,  0,  2}, 1},
+            {{ 10,  0,  0,  2}, 1},
+        };
+        sample_tree sm(samples, parents);
+        morphology m(sm, false);
+
+        embedding em(m);
+
+        EXPECT_TRUE(location_eq(m, em.sample_location(0), (loc{0,0})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(1), (loc{0,0.1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(2), (loc{0,0.3})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(3), (loc{0,0.7})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(4), (loc{0,1})));
+
+        EXPECT_EQ(10., em.branch_length(0));
+    }
+
+    // Eight samples
+    //
+    //  sample ids:
+    //            0
+    //           1 3
+    //          2   4
+    //             5 6
+    //                7
+    {   // Spherical root.
+        pvec parents = {mnpos, 0, 1, 0, 3, 4, 4, 6};
+
+        svec samples = {
+            {{  0,  0,  0, 10}, 1},
+            {{ 10,  0,  0,  2}, 3},
+            {{100,  0,  0,  2}, 3},
+            {{  0, 10,  0,  2}, 3},
+            {{  0,100,  0,  2}, 3},
+            {{100,100,  0,  2}, 3},
+            {{  0,200,  0,  2}, 3},
+            {{  0,300,  0,  2}, 3},
+        };
+        sample_tree sm(samples, parents);
+        morphology m(sm, true);
+        ASSERT_EQ(5u, m.num_branches());
+
+        embedding em(m);
+
+        EXPECT_TRUE(location_eq(m, em.sample_location(0), (loc{0,0.5})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(1), (loc{1,0})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(2), (loc{1,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(3), (loc{2,0})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(4), (loc{2,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(5), (loc{3,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(6), (loc{4,0.5})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(7), (loc{4,1})));
+
+        EXPECT_EQ(20.,  em.branch_length(0));
+        EXPECT_EQ(90.,  em.branch_length(1));
+        EXPECT_EQ(90.,  em.branch_length(2));
+        EXPECT_EQ(100., em.branch_length(3));
+        EXPECT_EQ(200., em.branch_length(4));
+    }
+    {   // No Spherical root
+        pvec parents = {mnpos, 0, 1, 0, 3, 4, 4, 6};
+
+        svec samples = {
+            {{  0,  0,  0,  2}, 1},
+            {{ 10,  0,  0,  2}, 3},
+            {{100,  0,  0,  2}, 3},
+            {{  0, 10,  0,  2}, 3},
+            {{  0,100,  0,  2}, 3},
+            {{100,100,  0,  2}, 3},
+            {{  0,130,  0,  2}, 3},
+            {{  0,300,  0,  2}, 3},
+        };
+        sample_tree sm(samples, parents);
+        morphology m(sm, false);
+        ASSERT_EQ(4u, m.num_branches());
+
+        embedding em(m);
+
+        EXPECT_TRUE(location_eq(m, em.sample_location(0), (loc{0,0})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(1), (loc{0,0.1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(2), (loc{0,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(3), (loc{1,0.1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(4), (loc{1,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(5), (loc{2,1})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(6), (loc{3,0.15})));
+        EXPECT_TRUE(location_eq(m, em.sample_location(7), (loc{3,1})));
+
+        EXPECT_EQ(100., em.branch_length(0));
+        EXPECT_EQ(100., em.branch_length(1));
+        EXPECT_EQ(100., em.branch_length(2));
+        EXPECT_EQ(200., em.branch_length(3));
+    }
+}
 
 #if 0
 
@@ -8,7 +143,6 @@
 #include <string>
 #include <vector>
 
-#include "../test/gtest.h"
 
 #include <arbor/math.hpp>
 #include <arbor/morph/error.hpp>
@@ -28,116 +162,6 @@ std::ostream& operator<<(std::ostream& o, const std::vector<T>& v) {
 
 // Test the morphology meta-data that is cached on construction of
 // em_morpholgy, e.g. interpolation information and terminal nodes.
-TEST(em_morphology, cache) {
-    using pvec = std::vector<arb::msize_t>;
-    using svec = std::vector<arb::msample>;
-    using loc = arb::mlocation;
-    constexpr auto npos = arb::mnpos;
-
-    // A single unbranched cable with 5 sample points.
-    // The cable has length 10 μm, with samples located at
-    // 0 μm, 1 μm, 3 μm, 7 μm and 10 μm.
-    {
-        pvec parents = {npos, 0, 1, 2, 3};
-        svec samples = {
-            {{  0,  0,  0,  2}, 1},
-            {{  1,  0,  0,  2}, 1},
-            {{  3,  0,  0,  2}, 1},
-            {{  7,  0,  0,  2}, 1},
-            {{ 10,  0,  0,  2}, 1},
-        };
-        arb::sample_tree sm(samples, parents);
-        arb::em_morphology em(arb::morphology(sm, false));
-        EXPECT_EQ(em.sample2loc(0), (loc{0,0}));
-        EXPECT_EQ(em.sample2loc(1), (loc{0,0.1}));
-        EXPECT_EQ(em.sample2loc(2), (loc{0,0.3}));
-        EXPECT_EQ(em.sample2loc(3), (loc{0,0.7}));
-        EXPECT_EQ(em.sample2loc(4), (loc{0,1}));
-
-        EXPECT_EQ(em.root(),      (loc{0,0}));
-        EXPECT_EQ(em.terminals(), (arb::mlocation_list{{0,1}}));
-
-        EXPECT_EQ(10., em.branch_length(0));
-    }
-
-    // Eight samples
-    //
-    //  sample ids:
-    //            0
-    //           1 3
-    //          2   4
-    //             5 6
-    //                7
-    {   // Spherical root.
-        pvec parents = {npos, 0, 1, 0, 3, 4, 4, 6};
-
-        svec samples = {
-            {{  0,  0,  0, 10}, 1},
-            {{ 10,  0,  0,  2}, 3},
-            {{100,  0,  0,  2}, 3},
-            {{  0, 10,  0,  2}, 3},
-            {{  0,100,  0,  2}, 3},
-            {{100,100,  0,  2}, 3},
-            {{  0,200,  0,  2}, 3},
-            {{  0,300,  0,  2}, 3},
-        };
-        arb::sample_tree sm(samples, parents);
-        arb::em_morphology em(arb::morphology(sm, true));
-
-        EXPECT_EQ(em.sample2loc(0), (loc{0,0}));
-        EXPECT_EQ(em.sample2loc(1), (loc{1,0}));
-        EXPECT_EQ(em.sample2loc(2), (loc{1,1}));
-        EXPECT_EQ(em.sample2loc(3), (loc{2,0}));
-        EXPECT_EQ(em.sample2loc(4), (loc{2,1}));
-        EXPECT_EQ(em.sample2loc(5), (loc{3,1}));
-        EXPECT_EQ(em.sample2loc(6), (loc{4,0.5}));
-        EXPECT_EQ(em.sample2loc(7), (loc{4,1}));
-
-        EXPECT_EQ(em.root(),      (loc{0,0}));
-        EXPECT_EQ(em.terminals(), (arb::mlocation_list{{1,1}, {3,1}, {4,1}}));
-
-        ASSERT_EQ(5u, em.morph().num_branches());
-        EXPECT_EQ(20.,  em.branch_length(0));
-        EXPECT_EQ(90.,  em.branch_length(1));
-        EXPECT_EQ(90.,  em.branch_length(2));
-        EXPECT_EQ(100., em.branch_length(3));
-        EXPECT_EQ(200., em.branch_length(4));
-    }
-    {   // No Spherical root
-        pvec parents = {npos, 0, 1, 0, 3, 4, 4, 6};
-
-        svec samples = {
-            {{  0,  0,  0,  2}, 1},
-            {{ 10,  0,  0,  2}, 3},
-            {{100,  0,  0,  2}, 3},
-            {{  0, 10,  0,  2}, 3},
-            {{  0,100,  0,  2}, 3},
-            {{100,100,  0,  2}, 3},
-            {{  0,130,  0,  2}, 3},
-            {{  0,300,  0,  2}, 3},
-        };
-        arb::sample_tree sm(samples, parents);
-        arb::em_morphology em(arb::morphology(sm, false));
-
-        EXPECT_EQ(em.sample2loc(0), (loc{0,0}));
-        EXPECT_EQ(em.sample2loc(1), (loc{0,0.1}));
-        EXPECT_EQ(em.sample2loc(2), (loc{0,1}));
-        EXPECT_EQ(em.sample2loc(3), (loc{1,0.1}));
-        EXPECT_EQ(em.sample2loc(4), (loc{1,1}));
-        EXPECT_EQ(em.sample2loc(5), (loc{2,1}));
-        EXPECT_EQ(em.sample2loc(6), (loc{3,0.15}));
-        EXPECT_EQ(em.sample2loc(7), (loc{3,1}));
-
-        EXPECT_EQ(em.root(),      (loc{0,0}));
-        EXPECT_EQ(em.terminals(), (arb::mlocation_list{{0,1}, {2,1}, {3,1}}));
-
-        ASSERT_EQ(4u, em.morph().num_branches());
-        EXPECT_EQ(100., em.branch_length(0));
-        EXPECT_EQ(100., em.branch_length(1));
-        EXPECT_EQ(100., em.branch_length(2));
-        EXPECT_EQ(200., em.branch_length(3));
-    }
-}
 
 TEST(em_morphology, cover) {
     using pvec = std::vector<arb::msize_t>;

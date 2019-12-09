@@ -103,6 +103,7 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
     const auto& samples = m.samples();
     sample_locations_.resize(m.num_samples());
 
+
     for (msize_t bid = 0; bid<n_branch; ++bid) {
         unsigned parent = m.branch_parent(bid);
         auto sample_indices = util::make_range(m.branch_indexes(bid));
@@ -121,6 +122,8 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
 
             double cyl_ixa = 2.0/(pi*r);
             data_->ixa[bid].push_back(0., 1., rat_element<1, 1>(0., cyl_ixa*0.5, cyl_ixa));
+
+            sample_locations_[0] = mlocation{0, 0.5};
         }
         else {
             arb_assert(sample_indices.size()>1);
@@ -140,7 +143,6 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
             double length_scale = branch_length>0? 1./branch_length: 0;
 
             for (auto i: util::count_along(sample_indices)) {
-                if (i==0 && parent!=mnpos) continue;
                 sample_locations_[sample_indices[i]] = mlocation{bid, length_scale*sample_distance[i]};
             }
             sample_locations_[sample_indices.back()].pos = 1.; // Circumvent any rounding infelicities.
@@ -184,6 +186,7 @@ embed_pwlin1d::embed_pwlin1d(const arb::morphology& m) {
             arb_assert((data_->radius[bid].bounds()==std::pair<double, double>(0., 1.)));
             arb_assert((data_->area[bid].bounds()==std::pair<double, double>(0., 1.)));
             arb_assert((data_->ixa[bid].bounds()==std::pair<double, double>(0., 1.)));
+            arb_assert(sample_locations_.size()==m.samples().size());
         }
     }
 };

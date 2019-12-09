@@ -115,20 +115,12 @@ mcable_list cover(mcable_list cables, const morphology& m) {
     return L;
 }
 
-mlocation canonical(mlocation loc, const morphology& m) {
-    if (loc.pos==0) {
-        msize_t parent = m.branch_parent(loc.branch);
-        if (parent!=mnpos) return mlocation{parent, 1.};
-    }
-    return loc;
-}
-
 mcable_list remove_cover(mcable_list cables, const morphology& m) {
     // Find all zero-length cables at the end of cables, and convert to
     // their canonical representation.
     for (auto& c: cables) {
         if (c.dist_pos==0 || c.prox_pos==1) {
-            auto cloc = canonical(head(c), m);
+            auto cloc = canonical(m, head(c));
             c = {cloc.branch, cloc.pos, cloc.pos};
         }
     }

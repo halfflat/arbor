@@ -60,6 +60,8 @@ public:
 };
 
 // Morphology utility functions.
-mlocation_list minset(const mlocation_list&, const morphology&);
+mlocation_list minset(const morphology&, const mlocation_list&);
+
+mlocation canonical(const morphology&, mlocation);
 
 } // namespace arb
