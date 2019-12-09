@@ -2,6 +2,8 @@
  * Unit tests for em_morphology, region, locset, label_dict.
  */
 
+#if 0
+
 #include <cmath>
 #include <string>
 #include <vector>
@@ -199,57 +201,6 @@ TEST(em_morphology, cover) {
         EXPECT_EQ(em.cover({2,0}), (ll{{0,1}, {1,0}, {2,0}}));
         EXPECT_EQ(em.cover({3,0}), (ll{{2,1}, {3,0}, {4,0}}));
         EXPECT_EQ(em.cover({4,0}), (ll{{2,1}, {3,0}, {4,0}}));
-    }
-}
-
-TEST(em_morphology, minset) {
-    using pvec = std::vector<arb::msize_t>;
-    using svec = std::vector<arb::msample>;
-    using ll = arb::mlocation_list;
-    constexpr auto npos = arb::mnpos;
-
-    // Eight samples
-    //                  no-sphere  sphere
-    //          sample   branch    branch
-    //            0         0         0
-    //           1 3       0 1       1 2
-    //          2   4     0   1     1   2
-    //             5 6       2 3       3 4
-    //                7         3         4
-    pvec parents = {npos, 0, 1, 0, 3, 4, 4, 6};
-    svec samples = {
-        {{  0,  0,  0,  2}, 3},
-        {{ 10,  0,  0,  2}, 3},
-        {{100,  0,  0,  2}, 3},
-        {{  0, 10,  0,  2}, 3},
-        {{  0,100,  0,  2}, 3},
-        {{100,100,  0,  2}, 3},
-        {{  0,200,  0,  2}, 3},
-        {{  0,300,  0,  2}, 3},
-    };
-    arb::sample_tree sm(samples, parents);
-    {
-        arb::em_morphology em(arb::morphology(sm, false));
-
-        EXPECT_EQ((ll{}), em.minset(ll{}));
-        EXPECT_EQ((ll{{2,0.1}}), em.minset(ll{{2,0.1}}));
-        EXPECT_EQ((ll{{0,0.5}, {1,0.5}}), em.minset(ll{{0,0.5}, {1,0.5}}));
-        EXPECT_EQ((ll{{0,0.5}}), em.minset(ll{{0,0.5}}));
-        EXPECT_EQ((ll{{0,0}, {1,0}}), em.minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}));
-        EXPECT_EQ((ll{{0,0}, {1,0.5}}), em.minset(ll{{0,0}, {0,0.5}, {1,0.5}, {2,0.5}}));
-        EXPECT_EQ((ll{{0,0}, {2,0.5}}), em.minset(ll{{0,0}, {0,0.5}, {2,0.5}}));
-        EXPECT_EQ((ll{{0,0}, {2,0.5}, {3,0}}), em.minset(ll{{0,0}, {0,0.5}, {2,0.5}, {3,0}, {3,1}}));
-        EXPECT_EQ((ll{{0,0}, {1,0}}), em.minset(ll{{0,0}, {0,0.5}, {1,0}, {2,0.5}, {3,0}, {3,1}}));
-    }
-    {
-        arb::em_morphology em(arb::morphology(sm, true));
-
-        EXPECT_EQ((ll{}), em.minset(ll{}));
-        EXPECT_EQ((ll{{2,0.1}}), em.minset(ll{{2,0.1}}));
-        EXPECT_EQ((ll{{0,0.5}}), em.minset(ll{{0,0.5}, {1,0.5}}));
-        EXPECT_EQ((ll{{0,0.5}}), em.minset(ll{{0,0.5}}));
-        EXPECT_EQ((ll{{0,0}}), em.minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}));
-        EXPECT_EQ((ll{{1,0.5}, {3,0.1}, {4,0.5}}), em.minset(ll{{1,0.5}, {1,1}, {3,0.1}, {4,0.5}, {4,0.7}}));
     }
 }
 
@@ -691,4 +642,6 @@ TEST(region, thingify) {
         EXPECT_EQ(thingify(join(lhs, rhs), em), ror);
     }
 }
+
+#endif
 

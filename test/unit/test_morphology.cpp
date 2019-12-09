@@ -599,3 +599,54 @@ TEST(morphology, swc) {
     EXPECT_EQ(31u, c.num_branches());
 }
 
+TEST(morphology, minset) {
+    using pvec = std::vector<arb::msize_t>;
+    using svec = std::vector<arb::msample>;
+    using ll = arb::mlocation_list;
+    constexpr auto npos = arb::mnpos;
+
+    // Eight samples
+    //                  no-sphere  sphere
+    //          sample   branch    branch
+    //            0         0         0
+    //           1 3       0 1       1 2
+    //          2   4     0   1     1   2
+    //             5 6       2 3       3 4
+    //                7         3         4
+    pvec parents = {npos, 0, 1, 0, 3, 4, 4, 6};
+    svec samples = {
+        {{  0,  0,  0,  2}, 3},
+        {{ 10,  0,  0,  2}, 3},
+        {{100,  0,  0,  2}, 3},
+        {{  0, 10,  0,  2}, 3},
+        {{  0,100,  0,  2}, 3},
+        {{100,100,  0,  2}, 3},
+        {{  0,200,  0,  2}, 3},
+        {{  0,300,  0,  2}, 3},
+    };
+    arb::sample_tree sm(samples, parents);
+    {
+        arb::morphology m(sm, false);
+
+        EXPECT_EQ((ll{}), minset(ll{}, m));
+        EXPECT_EQ((ll{{2,0.1}}), minset(ll{{2,0.1}}, m));
+        EXPECT_EQ((ll{{0,0.5}, {1,0.5}}), minset(ll{{0,0.5}, {1,0.5}}, m));
+        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}}, m));
+        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}, m));
+        EXPECT_EQ((ll{{0,0}, {1,0.5}}), minset(ll{{0,0}, {0,0.5}, {1,0.5}, {2,0.5}}, m));
+        EXPECT_EQ((ll{{0,0}, {2,0.5}}), minset(ll{{0,0}, {0,0.5}, {2,0.5}}, m));
+        EXPECT_EQ((ll{{0,0}, {2,0.5}, {3,0}}), minset(ll{{0,0}, {0,0.5}, {2,0.5}, {3,0}, {3,1}}, m));
+        EXPECT_EQ((ll{{0,0}, {1,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {2,0.5}, {3,0}, {3,1}}, m));
+    }
+    {
+        arb::morphology m(sm, true);
+
+        EXPECT_EQ((ll{}), minset(ll{}, m));
+        EXPECT_EQ((ll{{2,0.1}}), minset(ll{{2,0.1}}, m));
+        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}, {1,0.5}}, m));
+        EXPECT_EQ((ll{{0,0.5}}), minset(ll{{0,0.5}}, m));
+        EXPECT_EQ((ll{{0,0}}), minset(ll{{0,0}, {0,0.5}, {1,0}, {1,0.5}}, m));
+        EXPECT_EQ((ll{{1,0.5}, {3,0.1}, {4,0.5}}), minset(ll{{1,0.5}, {1,1}, {3,0.1}, {4,0.5}, {4,0.7}}, m));
+    }
+}
+

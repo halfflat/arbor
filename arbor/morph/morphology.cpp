@@ -1,4 +1,5 @@
 #include <iostream>
+#include <stack>
 #include <utility>
 
 #include <arbor/morph/morphexcept.hpp>
@@ -7,6 +8,7 @@
 #include <arbor/morph/primitives.hpp>
 
 #include "morph/mbranch.hpp"
+#include "util/rangeutil.hpp"
 #include "util/span.hpp"
 
 using arb::util::make_span;
@@ -232,6 +234,43 @@ msize_t morphology::num_branches() const {
 std::ostream& operator<<(std::ostream& o, const morphology& m) {
     return o << *m.impl_;
 }
+
+// Utilities.
+
+mlocation_list minset(const mlocation_list& in, const morphology& morph) {
+    mlocation_list L;
+
+    std::stack<msize_t> stack;
+
+    // All root branches must be searched.
+    for (auto c: morph.branch_children(mnpos)) {
+        stack.push(c);
+    }
+
+    // Depth-first traversal of the branch tree.
+    while (!stack.empty()) {
+        auto branch = stack.top();
+        stack.pop();
+
+        // Search for a location on branch.
+        auto it = std::lower_bound(in.begin(), in.end(), mlocation{branch, 0});
+
+        // If found, insert to the minset and skip the rest of this sub-tree.
+        if (it!=in.end() && it->branch==branch) {
+            L.push_back(*it);
+            continue;
+        }
+
+        // No location on this branch, so continue searching in this sub-tree.
+        for (auto c: morph.branch_children(branch)) {
+            stack.push(c);
+        }
+    }
+
+    util::sort(L);
+    return L;
+}
+
 
 } // namespace arb
 

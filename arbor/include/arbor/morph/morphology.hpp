@@ -59,4 +59,7 @@ public:
     friend std::ostream& operator<<(std::ostream&, const morphology&);
 };
 
+// Morphology utility functions.
+mlocation_list minset(const mlocation_list&, const morphology&);
+
 } // namespace arb
