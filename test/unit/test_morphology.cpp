@@ -1,7 +1,3 @@
-/*
- * Unit tests for sample_tree and morphology.
- */
-
 #include <fstream>
 #include <cmath>
 #include <string>
@@ -9,24 +5,13 @@
 
 #include "../test/gtest.h"
 
-#include <arbor/math.hpp>
 #include <arbor/morph/morphexcept.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/sample_tree.hpp>
 #include <arbor/cable_cell.hpp>
 
-#include "algorithms.hpp"
-#include "io/sepval.hpp"
 #include "morph/mbranch.hpp"
-#include "morph/em_morphology.hpp"
-#include "util/range.hpp"
 #include "util/span.hpp"
-#include "util/strprintf.hpp"
-
-template <typename T>
-std::ostream& operator<<(std::ostream& o, const std::vector<T>& v) {
-    return o << "[" << arb::io::csv(v) << "]";
-}
 
 // Test basic functions on properties of mpoint
 TEST(morphology, mpoint) {

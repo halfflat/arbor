@@ -8,8 +8,8 @@
 #include <arbor/cable_cell_param.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/locset.hpp>
+#include <arbor/morph/mprovider.hpp>
 
-#include "morph/em_morphology.hpp"
 #include "util/filter.hpp"
 #include "util/rangeutil.hpp"
 #include "util/span.hpp"

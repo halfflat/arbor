@@ -7,7 +7,6 @@
 #include <arbor/cable_cell_param.hpp>
 #include <arbor/morph/locset.hpp>
 
-#include "morph/em_morphology.hpp"
 #include "util/maputil.hpp"
 
 namespace arb {

@@ -13,7 +13,7 @@
 
 namespace arb {
 
-class mprovider;
+struct mprovider;
 
 class region {
 public:
