@@ -25,6 +25,7 @@
 namespace arb {
 
 using util::value_by_key;
+using util::count_along;
 
 // Extract a branch of an mcable_map as pw_elements:
 
@@ -212,6 +213,15 @@ cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     using impl::tail;
     using impl::append_offset;
 
+    if (right.empty()) {
+        return geom;
+    }
+
+    if (geom.empty()) {
+        geom = right;
+        return geom;
+    }
+
     auto append_divs = [](auto& left, const auto& right) {
         append_offset(left, left.back(), tail(right));
     };
@@ -225,8 +235,71 @@ cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     return geom;
 }
 
+struct fvm_cv_discretization {
+    using size_type = fvm_size_type;
+    using index_type = fvm_index_type;
+    using value_type = fvm_value_type;
 
-using util::count_along;
+    cv_geometry geometry;
+
+    bool empty() const { return geometry.empty(); }
+    size_type size() const { return geometry.size(); }
+    size_type n_cell() const { return geometry.n_cell(); }
+
+    std::vector<value_type> face_conductance; // [µS]
+    std::vector<value_type> cv_area;          // [µm²]
+    std::vector<value_type> cv_capacitance;   // [pF]
+    std::vector<value_type> init_membrane_potential; // [mV]
+    std::vector<value_type> temperature_K;    // [K]
+    std::vector<value_type> diam_um;          // [µm]
+};
+
+// Combine two fvm_cv_geometry groups in-place.
+fvm_cv_discretization& append(fvm_cv_discretization& dczn, const fvm_cv_discretization& right) {
+    append(dczn.geometry, right.geometry);
+
+    using util::append;
+    append(dczn.face_conductance, right.face_conductance);
+    append(dczn.cv_area, right.cv_area);
+    append(dczn.cv_capacitance, right.cv_capacitance);
+    append(dczn.init_membrane_potential, right.init_membrane_potential);
+    append(dczn.temperature_K, right.temperature_K);
+    append(dczn.diam_um, right.diam_um);
+
+    return dczn;
+}
+
+fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_defaults) {
+    fvm_cv_discretization D;
+
+    locset cv_ends = cell.default_parameters.discretization.cv_boundary_points(cell);
+    D.geometry = cv_geometry_from_ends(cv_ends);
+
+    if (D.geometry.empty()) return D;
+
+    // Computing face_conductance:
+    //
+    // Flux between adjacemt CVs is computed as if there were no membrane currents, and with the CV voltage
+    // values taken to be exact at a reference point in each CV:
+    //     * If the CV is unbranched, the reference point is taken to bt the CV midpoint.
+    //     * If the CV is branched, the reference point is taken to be closest branch point to
+    //       the interface between the two CVs.
+
+    for (auto i: count_along
+
+    return D;
+}
+
+fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& global_defaults) {
+    fvm_cv_discretization combined;
+
+    for (const auto& c: cells) {
+        append(combined, fvm_cv_discretize(c, global_defaults));
+    }
+    return combined;
+}
+
+
 using util::keys;
 using util::make_span;
 using util::optional;
