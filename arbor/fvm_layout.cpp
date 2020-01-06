@@ -6,6 +6,8 @@
 #include <arbor/arbexcept.hpp>
 #include <arbor/cable_cell.hpp>
 #include <arbor/morph/mcable_map.hpp>
+#include <arbor/morph/mprovider.hpp>
+#include <arbor/morph/morphology.hpp>
 #include <arbor/util/optional.hpp>
 
 #include "algorithms.hpp"
@@ -19,7 +21,10 @@
 #include "util/rangeutil.hpp"
 #include "util/transform.hpp"
 
+
 namespace arb {
+
+using util::value_by_key;
 
 // Extract a branch of an mcable_map as pw_elements:
 
@@ -44,6 +49,182 @@ pw_elements<T> on_branch(const mcable_map<T>& mm, msize_t bid) {
     return pw;
 }
 
+// Construct cv_geometry for cell from locset describing CV boundary points.
+cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
+    struct mloc_hash {
+        std::size_t operator()(const mlocation& loc) const { return loc.branch ^ std::hash<double>()(loc.pos); }
+    };
+    using mlocation_map = std::unordered_map<mlocation, fvm_size_type, mloc_hash>;
+    auto pop = [](auto& vec) { auto h = vec.back(); return vec.pop_back(), h; };
+
+    cv_geometry geom;
+    const auto& mp = cell.provider();
+    const auto& m = mp.morphology();
+
+    if (mp.morphology().empty()) {
+        return geom;
+    }
+
+    auto canon =    [&m](mlocation loc)  { return canonical(m, loc); };
+    auto origin =   [&canon](mcable cab) { return canon(mlocation{cab.branch, cab.prox_pos}); };
+    auto terminus = [&canon](mcable cab) { return canon(mlocation{cab.branch, cab.dist_pos}); };
+
+    mlocation_list locs = thingify(lset, mp);
+
+    std::vector<msize_t> n_cv_cables;
+    std::vector<mlocation> next_cv_head;
+    next_cv_head.push_back({mnpos, 0});
+
+    mcable_list cables, all_cables;
+    mlocation_list ends;
+    std::vector<msize_t> branches;
+
+    mlocation_map head_count;
+    unsigned extra_cv_count = 0;
+
+    while (!next_cv_head.empty()) {
+        mlocation h = pop(next_cv_head);
+
+        cables.clear();
+        branches.clear();
+        branches.push_back(h.branch);
+
+        while (!branches.empty()) {
+            msize_t b = pop(branches);
+
+            // Find most proximal point in locs on this branch, strictly more distal than h.
+            auto it = locs.end();
+            if (b!=mnpos && b==h.branch) {
+                it = std::upper_bound(locs.begin(), locs.end(), h);
+            }
+            else if (b!=mnpos) {
+                it = std::lower_bound(locs.begin(), locs.end(), mlocation{b, 0});
+            }
+
+            // If found, use as an end point, and stop descent.
+            // Otherwise, recurse over child branches.
+            if (it!=locs.end() && it->branch==b) {
+                cables.push_back({b, b==h.branch? h.pos: 0, it->pos});
+                next_cv_head.push_back(*it);
+            }
+            else {
+                if (b!=mnpos) {
+                    cables.push_back({b, b==h.branch? h.pos: 0, 1});
+                }
+                for (auto& c: m.branch_children(b)) {
+                    branches.push_back(c);
+                }
+            }
+        }
+
+        auto empty_cable = [](mcable c) { return c.prox_pos==c.dist_pos; };
+        cables.erase(std::remove_if(cables.begin(), cables.end(), empty_cable), cables.end());
+
+        if (!cables.empty()) {
+            if (++head_count[origin(cables.front())]==2) {
+                ++extra_cv_count;
+            }
+
+            n_cv_cables.push_back(cables.size());
+            util::sort(cables);
+            util::append(all_cables, std::move(cables));
+        }
+    }
+
+    geom.cv_cables.reserve(all_cables.size()+extra_cv_count);
+    geom.cv_parent.reserve(n_cv_cables.size()+extra_cv_count);
+    geom.cv_cables_divs.reserve(n_cv_cables.size()+extra_cv_count+1);
+    geom.cv_cables_divs.push_back(0);
+
+    mlocation_map parent_map;
+
+    unsigned all_cables_index = 0;
+    unsigned cv_index = 0;
+
+    // Multiple CVs meeting at (0,0)?
+    mlocation root{0, 0};
+    unsigned n_top_children = value_by_key(head_count, root).value_or(0);
+    if (n_top_children>1) {
+        // Add initial trical CV.
+        geom.cv_parent.push_back(mnpos);
+        geom.cv_cables.push_back(mcable{0, 0, 0});
+        geom.cv_cables_divs.push_back(geom.cv_cables.size());
+        parent_map[root] = cv_index++;
+    }
+
+    for (auto n_cables: n_cv_cables) {
+        mlocation head = origin(all_cables[all_cables_index]);
+        msize_t parent_cv = value_by_key(parent_map, head).value_or(mnpos);
+
+        auto cables = util::subrange_view(all_cables, all_cables_index, all_cables_index+n_cables);
+        std::copy(cables.begin(), cables.end(), std::back_inserter(geom.cv_cables));
+
+        geom.cv_parent.push_back(parent_cv);
+        geom.cv_cables_divs.push_back(geom.cv_cables.size());
+
+        auto this_cv = cv_index++;
+        for (auto cable: cables) {
+            mlocation term = terminus(cable);
+
+            unsigned n_children = value_by_key(head_count, term).value_or(0);
+            if (n_children>1) {
+                // Add trivial CV for lindep.
+                geom.cv_parent.push_back(this_cv);
+                geom.cv_cables.push_back(mcable{cable.branch, 1., 1.});
+                geom.cv_cables_divs.push_back(geom.cv_cables.size());
+                parent_map[term] = cv_index++;
+            }
+            else {
+                parent_map[term] = this_cv;
+            }
+        }
+
+        all_cables_index += n_cables;
+    }
+
+    // Fill cv/cell mapping for single cell (index 0).
+    geom.cv_to_cell.assign(cv_index, 0);
+    geom.cell_cv_divs = {0, cv_index};
+
+    return geom;
+}
+
+// Merge CV geometry lists in-place
+
+namespace impl {
+    using std::begin;
+    using std::end;
+    using std::next;
+
+    template <typename Seq>
+    auto tail(Seq& seq) { return util::make_range(next(begin(seq)), end(seq)); };
+
+    template <typename Container, typename Offset, typename Seq>
+    void append_offset(Container& ctr, const Offset& offset, const Seq& rhs) {
+        for (const auto& x: rhs) {
+            ctr.push_back(offset + x);
+        }
+    }
+}
+
+cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
+    using util::append;
+    using impl::tail;
+    using impl::append_offset;
+
+    auto append_divs = [](auto& left, const auto& right) {
+        append_offset(left, left.back(), tail(right));
+    };
+
+    append(geom.cv_cables, right.cv_cables);
+    append_divs(geom.cv_cables_divs, right.cv_cables_divs);
+
+    append_offset(geom.cv_parent, geom.size(), right.cv_parent);
+    append_offset(geom.cv_to_cell, geom.n_cell(), right.cv_to_cell);
+    append_divs(geom.cell_cv_divs, right.cell_cv_divs);
+    return geom;
+}
+
 
 using util::count_along;
 using util::keys;
@@ -51,7 +232,6 @@ using util::make_span;
 using util::optional;
 using util::subrange_view;
 using util::transform_view;
-using util::value_by_key;
 
 // Convenience routines
 
