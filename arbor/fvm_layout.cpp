@@ -21,7 +21,6 @@
 #include "util/rangeutil.hpp"
 #include "util/transform.hpp"
 
-
 namespace arb {
 
 using util::value_by_key;
