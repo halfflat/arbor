@@ -26,14 +26,22 @@ namespace arb {
 
 using util::value_by_key;
 using util::count_along;
-
-// Extract a branch of an mcable_map as pw_elements:
-
 using util::pw_elements;
-template <typename T>
-pw_elements<T> on_branch(const mcable_map<T>& mm, msize_t bid) {
+using util::sum_by;
+
+namespace {
+struct get_value {
+    template <typename X>
+    double operator()(const X& x) const { return x.value; }
+};
+} // anonymous namespace
+
+// Convert mcable_map values to a piecewise function over an mcable.
+// The projection gives the map from the values in the mcable_map to the values in the piecewise function.
+template <typename T, typename U, typename Proj = get_value>
+pw_elements<U> pw_over_cable(const mcable_map<T>& mm, mcable cable, U dflt_value, Proj projection = Proj{}) {
     using value_type = typename mcable_map<T>::value_type;
-    pw_elements<T> pw;
+    msize_t bid = cable.branch;
 
     struct as_branch {
         msize_t value;
@@ -41,11 +49,30 @@ pw_elements<T> on_branch(const mcable_map<T>& mm, msize_t bid) {
         as_branch(const msize_t& x): value(x) {}
     };
 
-    auto eq = std::equal_range(mm.begin(), mm.end(), bid,
-            [](as_branch a, as_branch b) { return a.value<b.value; });
+    auto map_on_branch = util::make_range(
+            std::equal_range(mm.begin(), mm.end(), bid,
+                [](as_branch a, as_branch b) { return a.value<b.value; }));
 
-    for (const auto& el: util::make_range(eq)) {
-        pw.push_back(el.first.prox_pos, el.first.dist_pos, el.second);
+    if (map_on_branch.empty()) {
+        return pw_elements<U>({cable.prox_pos, cable.dist_pos}, {dflt_value});
+    }
+
+    pw_elements<U> pw;
+    for (const auto& el: map_on_branch) {
+        double pw_right = pw.empty()? 0: pw.bounds().second;
+        if (el.first.prox_pos>pw_right) {
+            pw.push_back(pw_right, el.first.prox_pos, dflt_value);
+        }
+        pw.push_back(el.first.prox_pos, el.first.dist_pos, projection(el.second));
+    }
+
+    double pw_right = pw.empty()? 0: pw.bounds().second;
+    if (pw_right<1.) {
+        pw.push_back(pw_right, 1., dflt_value);
+    }
+
+    if (cable.prox_pos!=0 || cable.dist_pos!=1) {
+        pw = zip(pw, pw_elements<>({cable.prox_pos, cable.dist_pos}));
     }
     return pw;
 }
@@ -190,8 +217,6 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
     return geom;
 }
 
-// Merge CV geometry lists in-place
-
 namespace impl {
     using std::begin;
     using std::end;
@@ -208,6 +233,7 @@ namespace impl {
     }
 }
 
+// Merge CV geometry lists in-place.
 cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     using util::append;
     using impl::tail;
@@ -235,25 +261,6 @@ cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     return geom;
 }
 
-struct fvm_cv_discretization {
-    using size_type = fvm_size_type;
-    using index_type = fvm_index_type;
-    using value_type = fvm_value_type;
-
-    cv_geometry geometry;
-
-    bool empty() const { return geometry.empty(); }
-    size_type size() const { return geometry.size(); }
-    size_type n_cell() const { return geometry.n_cell(); }
-
-    std::vector<value_type> face_conductance; // [µS]
-    std::vector<value_type> cv_area;          // [µm²]
-    std::vector<value_type> cv_capacitance;   // [pF]
-    std::vector<value_type> init_membrane_potential; // [mV]
-    std::vector<value_type> temperature_K;    // [K]
-    std::vector<value_type> diam_um;          // [µm]
-};
-
 // Combine two fvm_cv_geometry groups in-place.
 fvm_cv_discretization& append(fvm_cv_discretization& dczn, const fvm_cv_discretization& right) {
     append(dczn.geometry, right.geometry);
@@ -269,28 +276,96 @@ fvm_cv_discretization& append(fvm_cv_discretization& dczn, const fvm_cv_discreti
     return dczn;
 }
 
-fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_defaults) {
+fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_dflt) {
     fvm_cv_discretization D;
 
     locset cv_ends = cell.default_parameters.discretization.cv_boundary_points(cell);
-    D.geometry = cv_geometry_from_ends(cv_ends);
+    D.geometry = cv_geometry_from_ends(cell, cv_ends);
 
     if (D.geometry.empty()) return D;
 
-    // Computing face_conductance:
-    //
-    // Flux between adjacemt CVs is computed as if there were no membrane currents, and with the CV voltage
-    // values taken to be exact at a reference point in each CV:
-    //     * If the CV is unbranched, the reference point is taken to bt the CV midpoint.
-    //     * If the CV is branched, the reference point is taken to be closest branch point to
-    //       the interface between the two CVs.
+    const auto& dflt = cell.default_parameters;
+    double dflt_resistivity = dflt.axial_resistivity.value_or(global_dflt.axial_resistivity.value());
+    double dflt_capacitance = dflt.membrane_capacitance.value_or(global_dflt.membrane_capacitance.value());
+    double dflt_potential =   dflt.init_membrane_potential.value_or(global_dflt.init_membrane_potential.value());
+    double dflt_temperature = dflt.temperature_K.value_or(global_dflt.temperature_K.value());
 
-    for (auto i: count_along
+    const auto& embedding = cell.embedding();
+    for (auto i: count_along(D.geometry.cv_parent)) {
+        auto cv_cables = D.geometry.cables(i);
+
+        // Computing face_conductance:
+        //
+        // Flux between adjacemt CVs is computed as if there were no membrane currents, and with the CV voltage
+        // values taken to be exact at a reference point in each CV:
+        //     * If the CV is unbranched, the reference point is taken to be the CV midpoint.
+        //     * If the CV is branched, the reference point is taken to be closest branch point to
+        //       the interface between the two CVs.
+
+        D.face_conductance[i] = 0;
+
+        fvm_index_type p = D.geometry.cv_parent[i];
+        if (p!=-1) {
+            auto parent_cables = D.geometry.cables(p);
+
+            msize_t bid = cv_cables.front().branch;
+            double parent_refpt = 0;
+            double cv_refpt = 1;
+
+            if (cv_cables.size()==1) {
+                mcable cv_cable = cv_cables.front();
+                cv_refpt = 0.5*(cv_cable.prox_pos+cv_cable.dist_pos);
+            }
+            if (parent_cables.size()==1) {
+                mcable parent_cable = parent_cables.front();
+                // A trivial parent CV with a zero-length cable might not
+                // be on the same branch.
+                if (parent_cable.branch==bid) {
+                    parent_refpt = 0.5*(parent_cable.prox_pos+parent_cable.dist_pos);
+                }
+            }
+
+            mcable span{bid, parent_refpt, cv_refpt};
+            D.face_conductance[i] = embedding.integrate_ixa(bid,
+                pw_over_cable(cell.region_assignments().get<axial_resistivity>(), span, dflt_resistivity));
+        }
+
+        D.cv_area[i] = 0;
+        D.cv_capacitance[i] = 0;
+        D.init_membrane_potential[i] = 0;
+        D.diam_um[i] = 0;
+        double cv_length = 0;
+
+        for (mcable c: cv_cables) {
+            D.cv_area[i] += embedding.integrate_area(c);
+
+            D.cv_capacitance[i] += embedding.integrate_area(c.branch,
+                pw_over_cable(cell.region_assignments().get<membrane_capacitance>(), c, dflt_capacitance));
+
+            D.init_membrane_potential[i] += embedding.integrate_area(c.branch,
+                pw_over_cable(cell.region_assignments().get<init_membrane_potential>(), c, dflt_potential));
+
+            D.temperature_K[i] += embedding.integrate_area(c.branch,
+                pw_over_cable(cell.region_assignments().get<temperature_K>(), c, dflt_temperature));
+
+            cv_length += embedding.integrate_length(c);
+        }
+
+        if (D.cv_area[i]>0) {
+            D.init_membrane_potential[i] /= D.cv_area[i];
+            D.temperature_K[i] /= D.cv_area[i];
+        }
+        if (cv_length>0) {
+            D.diam_um[i] = D.cv_area[i]/(cv_length*math::pi<double>);
+        }
+    }
 
     return D;
 }
 
-fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& global_defaults) {
+fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells,
+    const cable_cell_parameter_set& global_defaults)
+{
     fvm_cv_discretization combined;
 
     for (const auto& c: cells) {

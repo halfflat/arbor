@@ -62,6 +62,10 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset);
 
 // Discretization of morphologies and physical properties. Contains cv_geometry
 // as above.
+//
+// diam_um is taken to be the diameter of a CV with constant diameter and same
+// extent which has the same surface area (i.e. cv_area/(πL) where L is the
+// total length of the cables comprising the CV.)
 
 struct fvm_cv_discretization {
     using size_type = fvm_size_type;
