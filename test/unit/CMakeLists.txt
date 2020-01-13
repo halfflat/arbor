@@ -84,6 +84,7 @@ set(unit_sources
     test_compartments.cpp
     test_counter.cpp
     test_cv_geom.cpp
+    test_cv_layout.cpp
     test_cv_policy.cpp
     test_cycle.cpp
     test_domain_decomposition.cpp

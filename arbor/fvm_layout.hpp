@@ -36,7 +36,9 @@ struct cv_geometry {
     }
 
     size_type size() const {
-        arb_assert((cv_parent.empty() && cv_cables_divs.empty()) ||
+        arb_assert((cv_parent.empty() && cv_cables_divs.empty() &&
+                    cv_cables.empty() && cv_to_cell.empty())
+                   ||
                    (cv_parent.size()+1 == cv_cables_divs.size() &&
                     cv_parent.size() == cv_to_cell.size() &&
                     (unsigned)cv_to_cell.back()+1 == cell_cv_divs.size()-1));
@@ -49,7 +51,7 @@ struct cv_geometry {
     }
 
     size_type n_cell() const {
-        return empty()? 0: 1+cv_to_cell.back();
+        return cell_cv_divs.empty()? 0: cell_cv_divs.size()-1;
     }
 };
 

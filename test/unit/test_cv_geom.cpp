@@ -29,7 +29,9 @@ TEST(cv_geom, empty) {
     EXPECT_TRUE(geom.cv_parent.empty());
     EXPECT_TRUE(geom.cv_cables.empty());
     EXPECT_TRUE(geom.cv_cables_divs.empty());
-    EXPECT_EQ(0u, geom.size());
+
+    EXPECT_EQ(0u, geom.size()); // size()/empty() reflects number of CVs.
+    EXPECT_EQ(1u, geom.n_cell()); // can have no CVs but >0 cells.
 }
 
 TEST(cv_geom, trivial) {
