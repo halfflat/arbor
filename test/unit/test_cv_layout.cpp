@@ -15,16 +15,11 @@
 using namespace arb;
 using util::make_span;
 
-template <typename... A>
-locset as_locset(mlocation head, A... tail) {
-    return join(ls::location(head), ls::location(tail)...);
-}
-
-TEST(cv_geom, empty) {
+TEST(cv_layout, empty) {
     using namespace common_morphology;
 
     cable_cell empty_cell{m_empty};
-    cv_geometry geom = cv_geometry_from_ends(empty_cell, ls::nil());
+    fvm_cv_discretization D = fvm_cv_geometry_from_ends(empty_cell, ls::nil());
 
     EXPECT_TRUE(geom.cv_parent.empty());
     EXPECT_TRUE(geom.cv_cables.empty());
@@ -32,7 +27,7 @@ TEST(cv_geom, empty) {
     EXPECT_EQ(0u, geom.size());
 }
 
-TEST(cv_geom, trivial) {
+TEST(cv_layout, trivial) {
     using namespace common_morphology;
 
     for (auto& p: test_morphologies) {
@@ -64,7 +59,7 @@ TEST(cv_geom, trivial) {
     }
 }
 
-TEST(cv_geom, one_cv_per_branch) {
+TEST(cv_layout, one_cv_per_branch) {
     using namespace common_morphology;
 
     for (auto& p: test_morphologies) {
@@ -125,7 +120,7 @@ TEST(cv_geom, one_cv_per_branch) {
     }
 }
 
-TEST(cv_geom, midpoints) {
+TEST(cv_layout, midpoints) {
     using namespace common_morphology;
 
     // Place CV boundaries at the midpoints of each branch.
@@ -197,7 +192,7 @@ TEST(cv_geom, midpoints) {
     }
 }
 
-TEST(cv_geom, weird) {
+TEST(cv_layout, weird) {
     // m_reg_b6 has the following branch structure:
     //
     // ---0---+---1---+---3---

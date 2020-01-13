@@ -90,6 +90,10 @@ struct fvm_cv_discretization {
 // (Returns reference to first argument.)
 fvm_cv_discretization& append(fvm_cv_discretization&, const fvm_cv_discretization&);
 
+// Construct fvm_cv_discretization from one or more cells.
+
+fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_dflt);
+fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& global_defaults);
 
 // Discretization data for an unbranched segment.
 

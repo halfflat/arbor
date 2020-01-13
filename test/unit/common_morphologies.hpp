@@ -15,7 +15,7 @@ inline std::vector<arb::msample> make_morph_samples(unsigned n) {
 }
 
 // Test morphologies for CV determination:
-// Samples points have radius 0.5, giving an initial branch length of 1.0
+// Sample points have radius 0.5, giving an initial branch length of 1.0
 // for morphologies with spherical roots.
 
 static const arb::morphology m_empty;
