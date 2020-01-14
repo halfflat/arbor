@@ -351,8 +351,9 @@ fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell
             }
 
             mcable span{bid, parent_refpt, cv_refpt};
-            D.face_conductance[i] = embedding.integrate_ixa(bid,
+            double resistance = embedding.integrate_ixa(bid,
                 pw_over_cable(cell.region_assignments().get<axial_resistivity>(), span, dflt_resistivity));
+            D.face_conductance[i] = 100/resistance; // 100 scales to µS.
         }
 
         D.cv_area[i] = 0;

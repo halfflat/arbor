@@ -80,3 +80,54 @@ TEST(cv_layout, trivial) {
         EXPECT_DOUBLE_EQ(total_area*params.membrane_capacitance.value(), D.cv_capacitance[cv]);
     }
 }
+
+TEST(cv_layout, cable) {
+    auto morph = common_morphology::m_reg_b1; // one branch, cable constant radius.
+
+    auto params = neuron_parameter_defaults;
+    params.init_membrane_potential = 0;
+
+    cable_cell c(morph);
+    c.allow_partial_paint();
+    c.paint(reg::cable({0, 0.0, 0.2}), init_membrane_potential{10});
+    c.paint(reg::cable({0, 0.2, 0.7}), init_membrane_potential{20});
+    c.paint(reg::cable({0, 0.7, 1.0}), init_membrane_potential{30});
+
+    params.discretization = cv_policy_explicit(ls::nil());
+    fvm_cv_discretization D = fvm_cv_discretize(c, params);
+
+    ASSERT_EQ(1u, D.size());
+    EXPECT_DOUBLE_EQ(0.2*10+0.5*20+0.3*30, D.init_membrane_potential[0]);
+
+    params.discretization = cv_policy_explicit(ls::location({0, 0.3}));
+    D = fvm_cv_discretize(c, params);
+
+    ASSERT_EQ(2u, D.size());
+    EXPECT_DOUBLE_EQ((0.2*10+0.1*20)/0.3, D.init_membrane_potential[0]);
+    EXPECT_DOUBLE_EQ((0.4*20+0.3*30)/0.7, D.init_membrane_potential[1]);
+}
+
+TEST(cv_layout, cable_conductance) {
+    auto morph = common_morphology::m_reg_b1; // one branch, cable constant radius.
+    const double rho = 5.; // [Ω·cm]
+
+    auto params = neuron_parameter_defaults;
+    params.axial_resistivity = rho;
+
+    cable_cell c(morph);
+    double radius = c.embedding().radius(mlocation{0, 0.5});
+    double length = c.embedding().branch_length(0);
+
+    params.discretization = cv_policy_explicit(ls::location({0, 0.3}));
+    fvm_cv_discretization D = fvm_cv_discretize(c, params);
+
+    ASSERT_EQ(2u, D.size());
+
+    // Face conductance should be conductance between (relative) points 0.15 and 0.65.
+    double xa = math::pi<double>*radius*radius; // [µm^2]
+    double l = (0.65-0.15)*length; // [µm]
+    double sigma = 100 * xa/(l*rho); // [µS]
+
+    EXPECT_DOUBLE_EQ(0., D.face_conductance[0]);
+    EXPECT_DOUBLE_EQ(sigma, D.face_conductance[1]);
+}

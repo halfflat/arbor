@@ -142,6 +142,9 @@ public:
     // All of the members marked with LEGACY below will be removed once
     // the discretization code has moved from consuming segments to em_morphology.
 
+    // LEGACY (temporary hack for testing new discretization)
+    void allow_partial_paint();
+
     // LEGACY
     bool has_soma() const;
 

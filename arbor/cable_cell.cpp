@@ -211,7 +211,7 @@ struct cable_cell_impl {
                 throw cable_cell_error(util::pprintf("cable {} overpaints", c));
             }
 
-            if (c.prox_pos!=0 || c.dist_pos!=1) {
+            if (!allow_partial && (c.prox_pos!=0 || c.dist_pos!=1)) {
                 throw cable_cell_error(util::pprintf(
                     "cable_cell does not support regions with partial branches: {}", c));
             }
@@ -219,6 +219,8 @@ struct cable_cell_impl {
             paint_segment(segments[c.branch], prop);
         }
     }
+
+    bool allow_partial = false;
 };
 
 using impl_ptr = std::unique_ptr<cable_cell_impl, void (*)(cable_cell_impl*)>;
@@ -315,6 +317,11 @@ ARB_PP_FOREACH(FWD_PLACE,\
 //
 // TODO: deprectate the following as soon as discretization code catches up with em_morphology
 //
+
+void cable_cell::allow_partial_paint() {
+    impl_->allow_partial = true;
+}
+
 const soma_segment* cable_cell::soma() const {
     return has_soma()? segment(0)->as_soma(): nullptr;
 }
