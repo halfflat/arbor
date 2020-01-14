@@ -26,6 +26,7 @@ namespace arb {
 
 using util::value_by_key;
 using util::count_along;
+using util::optional;
 using util::pw_elements;
 using util::sum_by;
 
@@ -34,6 +35,12 @@ struct get_value {
     template <typename X>
     double operator()(const X& x) const { return x.value; }
 };
+
+template <typename V>
+optional<V> operator|(const optional<V>& a, const optional<V>& b) {
+    return a? a: b;
+}
+
 } // anonymous namespace
 
 // Convert mcable_map values to a piecewise function over an mcable.
@@ -90,6 +97,7 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
     const auto& m = mp.morphology();
 
     if (mp.morphology().empty()) {
+        geom.cell_cv_divs = {0, 0};
         return geom;
     }
 
@@ -239,24 +247,32 @@ cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     using impl::tail;
     using impl::append_offset;
 
-    if (right.empty()) {
+    if (!right.n_cell()) {
         return geom;
     }
 
-    if (geom.empty()) {
+    if (!geom.n_cell()) {
         geom = right;
         return geom;
     }
 
     auto append_divs = [](auto& left, const auto& right) {
-        append_offset(left, left.back(), tail(right));
+        if (left.empty()) {
+            left = right;
+        }
+        else if (!right.empty()) {
+            append_offset(left, left.back(), tail(right));
+        }
     };
+
+    auto geom_n_cv = geom.size();
+    auto geom_n_cell = geom.n_cell();
 
     append(geom.cv_cables, right.cv_cables);
     append_divs(geom.cv_cables_divs, right.cv_cables_divs);
 
-    append_offset(geom.cv_parent, geom.size(), right.cv_parent);
-    append_offset(geom.cv_to_cell, geom.n_cell(), right.cv_to_cell);
+    append_offset(geom.cv_parent, geom_n_cv, right.cv_parent);
+    append_offset(geom.cv_to_cell, geom_n_cell, right.cv_to_cell);
     append_divs(geom.cell_cv_divs, right.cell_cv_divs);
     return geom;
 }
@@ -277,18 +293,27 @@ fvm_cv_discretization& append(fvm_cv_discretization& dczn, const fvm_cv_discreti
 }
 
 fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_dflt) {
+    const auto& dflt = cell.default_parameters;
     fvm_cv_discretization D;
 
-    locset cv_ends = cell.default_parameters.discretization.cv_boundary_points(cell);
+    cv_policy pol = (dflt.discretization | global_dflt.discretization).value_or(default_cv_policy());
+    locset cv_ends = pol.cv_boundary_points(cell);
     D.geometry = cv_geometry_from_ends(cell, cv_ends);
 
     if (D.geometry.empty()) return D;
 
-    const auto& dflt = cell.default_parameters;
-    double dflt_resistivity = dflt.axial_resistivity.value_or(global_dflt.axial_resistivity.value());
-    double dflt_capacitance = dflt.membrane_capacitance.value_or(global_dflt.membrane_capacitance.value());
-    double dflt_potential =   dflt.init_membrane_potential.value_or(global_dflt.init_membrane_potential.value());
-    double dflt_temperature = dflt.temperature_K.value_or(global_dflt.temperature_K.value());
+    auto n_cv = D.geometry.size();
+    D.face_conductance.resize(n_cv);
+    D.cv_area.resize(n_cv);
+    D.cv_capacitance.resize(n_cv);
+    D.init_membrane_potential.resize(n_cv);
+    D.temperature_K.resize(n_cv);
+    D.diam_um.resize(n_cv);
+
+    double dflt_resistivity = *(dflt.axial_resistivity | global_dflt.axial_resistivity);
+    double dflt_capacitance = *(dflt.membrane_capacitance | global_dflt.membrane_capacitance);
+    double dflt_potential =   *(dflt.init_membrane_potential | global_dflt.init_membrane_potential);
+    double dflt_temperature = *(dflt.temperature_K | global_dflt.temperature_K);
 
     const auto& embedding = cell.embedding();
     for (auto i: count_along(D.geometry.cv_parent)) {
@@ -377,7 +402,6 @@ fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells,
 
 using util::keys;
 using util::make_span;
-using util::optional;
 using util::subrange_view;
 using util::transform_view;
 
@@ -424,11 +448,6 @@ namespace {
     };
 
     ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cv_param,(a.cv,a.params,a.target),(b.cv,b.params,b.target))
-
-    template <typename V>
-    optional<V> operator|(const optional<V>& a, const optional<V>& b) {
-        return a? a: b;
-    }
 
     // For each segment given by the provided sorted sequence of segment
     // indices, call `action` for each CV intersecting the segment, starting
@@ -774,7 +793,6 @@ fvm_discretization fvm_discretize(const std::vector<cable_cell>& cells, const ca
 fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_discretization& D) {
     using util::assign;
     using util::sort_by;
-    using util::optional;
 
     using value_type = fvm_value_type;
     using index_type = fvm_index_type;

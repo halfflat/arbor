@@ -66,7 +66,6 @@ TEST(cv_layout, trivial) {
 
         auto cv = cv_indices.front();
 
-        EXPECT_DOUBLE_EQ(params.membrane_capacitance.value(), D.cv_capacitance[cv]);
         EXPECT_DOUBLE_EQ(params.temperature_K.value(), D.temperature_K[cv]);
         EXPECT_DOUBLE_EQ(params.init_membrane_potential.value(), D.init_membrane_potential[cv]);
 
@@ -78,5 +77,6 @@ TEST(cv_layout, trivial) {
         }
 
         EXPECT_DOUBLE_EQ(total_area, D.cv_area[cv]);
+        EXPECT_DOUBLE_EQ(total_area*params.membrane_capacitance.value(), D.cv_capacitance[cv]);
     }
 }

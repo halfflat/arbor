@@ -294,7 +294,7 @@ struct cable_cell_parameter_set {
     std::unordered_map<std::string, cable_cell_ion_data> ion_data;
     std::unordered_map<std::string, mechanism_desc> reversal_potential_method;
 
-    cv_policy discretization = default_cv_policy();
+    util::optional<cv_policy> discretization;
 };
 
 extern cable_cell_parameter_set neuron_parameter_defaults;
