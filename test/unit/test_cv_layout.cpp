@@ -131,3 +131,71 @@ TEST(cv_layout, cable_conductance) {
     EXPECT_DOUBLE_EQ(0., D.face_conductance[0]);
     EXPECT_DOUBLE_EQ(sigma, D.face_conductance[1]);
 }
+
+TEST(cv_layout, zero_size_cv) {
+    // Six branches; branches 0, 1 and 2 meet at (0, 1); branches
+    // 2, 3, 4, and 5 meet at (2, 1). Terminal branches are 1, 3, 4, and 5.
+    auto morph = common_morphology::m_reg_b6;
+    cable_cell cell(morph);
+
+    auto params = neuron_parameter_defaults;
+    const double rho = 5.; // [Ω·cm]
+    const double pi = math::pi<double>;
+    params.axial_resistivity = rho;
+
+    // With one CV per branch, expect reference points for face conductance
+    // to be at (0, 0.5); (0, 1); (1, 0.5); (2, 1); (3, 0.5); (4, 0.5); (5, 0.5).
+    // The first CV should be all of branch 0; the second CV should be the
+    // zero-size CV at the branch point (0, 1).
+    params.discretization = cv_policy_fixed_per_branch(1);
+    fvm_cv_discretization D = fvm_cv_discretize(cell, params);
+
+    unsigned cv_a = 0, cv_x = 1;
+    ASSERT_TRUE(util::equal(mcable_list{mcable{0, 0, 1}}, D.geometry.cables(cv_a)));
+    ASSERT_TRUE(util::equal(mcable_list{mcable{0, 1, 1}}, D.geometry.cables(cv_x)));
+
+    // Find the two CV children of CV x.
+    unsigned cv_b = -1, cv_c = -1;
+    for (unsigned i=2; i<D.size(); ++i) {
+        if ((unsigned)D.geometry.cv_parent[i]==cv_x) {
+            if (cv_b==(unsigned)-1) cv_b = i;
+            else if (cv_c==(unsigned)-1) cv_c = i;
+            else FAIL();
+        }
+    }
+
+    ASSERT_EQ(1u, D.geometry.cables(cv_b).size());
+    ASSERT_EQ(1u, D.geometry.cables(cv_c).size());
+    if (D.geometry.cables(cv_b).front().branch>D.geometry.cables(cv_c).front().branch) {
+        std::swap(cv_b, cv_c);
+    }
+
+    ASSERT_TRUE(util::equal(mcable_list{mcable{1, 0, 1}}, D.geometry.cables(cv_b)));
+    ASSERT_TRUE(util::equal(mcable_list{mcable{2, 0, 1}}, D.geometry.cables(cv_c)));
+
+    // All non-conductance values for zero-size cv_x should be zero.
+    EXPECT_EQ(0., D.cv_area[cv_x]);
+    EXPECT_EQ(0., D.cv_capacitance[cv_x]);
+    EXPECT_EQ(0., D.init_membrane_potential[cv_x]);
+    EXPECT_EQ(0., D.temperature_K[cv_x]);
+    EXPECT_EQ(0., D.diam_um[cv_x]);
+
+    // Face conductance for zero-size cv_x:
+    double l_x = cell.embedding().branch_length(0);
+    double r_x = cell.embedding().radius(mlocation{0, 0.5});
+    double sigma_x = 100 * pi * r_x * r_x / (l_x/2 * rho); // [µS]
+    EXPECT_DOUBLE_EQ(sigma_x, D.face_conductance[cv_x]);
+
+    // Face conductance for child CV cv_b:
+    double l_b = cell.embedding().branch_length(1);
+    double r_b = cell.embedding().radius(mlocation{1, 0.5});
+    double sigma_b = 100 * pi * r_b * r_b / (l_b/2 * rho); // [µS]
+    EXPECT_DOUBLE_EQ(sigma_b, D.face_conductance[cv_b]);
+
+    // Face conductance for child CV cv_c:
+    // (Distal reference point is at end of branch, so l_c not l_c/2 below.)
+    double l_c = cell.embedding().branch_length(1);
+    double r_c = cell.embedding().radius(mlocation{1, 0.5});
+    double sigma_c = 100 * pi * r_c * r_c / (l_c * rho); // [µS]
+    EXPECT_DOUBLE_EQ(sigma_c, D.face_conductance[cv_c]);
+}
