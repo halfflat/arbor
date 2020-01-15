@@ -400,6 +400,133 @@ fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells,
     return combined;
 }
 
+template <typename T>
+using branch_pw<T> = std::vector<util::pw_elements<T>>;
+
+// Return piece-wise constant map over branches on a single cell corresponding to CV index.
+// CV ordering ensures monotonicity in branches.
+branch_pw<fvm_size_type> branch_to_cv_map(const cv_geometry& geom, fvm_size_type cell_idx) {
+    branch_pw<fvm_size_type> bmap;
+
+    for (auto cv: util::make_span(geom.cell_cv_interval(cell_idx))) {
+        for (auto cable: geom.cables(cv)) {
+            if (cable.branch>=bmap.size()) {
+                bmap.resize(cable.branch+1);
+            }
+
+            // Ordering of CV ensures CV cables on any given branch are found sequentially.
+            bmap[cable.branch].append(cable.prox_pos, cable.dist_pos, cv);
+        }
+    }
+
+    return bmap;
+}
+
+fvm_size_type location_cv(const branch_pw<fvm_size_type>& bmap, fvm_size_type mlocation loc) {
+    return bmap.at(loc.branch).index_of(loc.pos);
+}
+
+// TODO: change to single cell + append as above...
+// CVs are absolute (taken from combined discretization) so do not need to be shifted.
+// Only target numbers need to be shifted.
+fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& right) {
+    using util::append;
+
+    fvm_size_type target_offset = left.ntarget;
+
+    for (const auto& kv: right.ions) {
+        fvm_ion_config& L = left.ions[kv.first];
+        const fvm_ion_config& R = kv.second;
+
+        append(L.cv, R.cv);
+        append(L.init_iconc, R.init_iconc);
+        append(L.reset_iconc, R.reset_iconc);
+        append(L.reset_econc, R.reset_econc);
+        append(L.init_revpot, R.init_revpot);
+    }
+
+    for (const auto& kv: right.mechanisms) {
+        fvm_mechanism_data& L = left.mechansims[kv.first];
+        const fvm_mechanism_data& R = kv.second;
+
+        L.kind = R.kind;
+        append(L.cv, R.cv);
+        append(L.multiplicity, R.multiplicity);
+        append(L.norm_area, R.norm_area);
+        append_offset(L.target, target_offset, R.target);
+
+        arb_assert(util::is_sorted_by(L.param_values, util::first));
+        arb_assert(util::is_sorted_by(R.param_values, util::first));
+        arb_assert(L.param_values.size()==R.param_values.size());
+
+        for (auto j: util::count_along(R.param_values)) {
+            arb_assert(L.param_values[j].first==R.param_values[j].first);
+            append(L.param_values[j].second, R.param_values[j].second);
+        }
+    }
+    left.ntarget += R.ntarget;
+
+    return left;
+}
+
+fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop,
+    const std::vector<cable_cell>& cells, const fvm_cv_discretization& D)
+{
+    fvm_mechanism_data combined;
+    for (auto cell_idx: util::count_along(cells)) {
+        append(combined, fvm_build_mechanism_data(gprop, cells[cell_idx], D, cell_idx));
+    }
+    return combined;
+}
+
+fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop,
+    const cable_cell& cell, const fvm_cv_discretization& D, fvm_size_type cell_idx)
+{
+    using size_type = fvm_size_type;
+    using util::assign;
+    using util::sort_by;
+
+    const mechanism_catalogue& catalogue = *gprop.catalogue;
+
+    // Synapses
+
+    struct synapse_unpacked_layout {
+        std::unordered_map<std::string, std::vector<double>> param_value;
+        std::vector<size_type> target_index;
+        std::vector<size_type> cv;
+    };
+
+    branch_pw_unsigned bmap = branch_to_cv_map(D.geometry(), cell_idx);
+
+    for (const auto& entry: cells.synapses()) {
+        const std::string& name = entry.first;
+        mechanism_info info = catalogue[name];
+
+        synapse_unpacked_layout sl;
+        for (const placed<mechanism_desc>& pm: entry.second) {
+            for (const auto& kv: info.parameters) {
+                sl.param_value[kv.first].push_back(kv.second.default_value);
+            }
+
+            for (const auto& kv: pm.item.values()) {
+                sl.at(kv.first) = kv.second;
+            }
+
+            sl.target_index.push_back(pm.lid);
+            sl.cv.push_back(location_cv(bmap, pm.loc));
+        }
+
+        // Permute synapse instances so that they are in increasing CV order;
+        // cv_order[i] is the index of the ith instance by increasing CV.
+
+        std::vector<size_type> cv_order;
+        assign(cv_order, count_along(sl));
+        sort_by(cv_order, [&](size_type i) { return sl.cv[i]; });
+
+...;
+    }
+
+}
 
 using util::keys;
 using util::make_span;

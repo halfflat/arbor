@@ -243,4 +243,7 @@ struct fvm_mechanism_data {
 
 fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_discretization& D);
 
+// (new version, in development)
+fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_cv_discretization& D);
+
 } // namespace arb
