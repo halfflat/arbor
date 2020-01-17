@@ -41,6 +41,38 @@ optional<V> operator|(const optional<V>& a, const optional<V>& b) {
     return a? a: b;
 }
 
+// Given sorted vectors a, b, return sorted vector with unique elements v
+// such that v is present in a or b.
+template <typename V>
+std::vector<V> unique_union(const std::vector<V>& a, const std::vector<V>& b) {
+    std::vector<V> u;
+
+    auto ai = a.begin();
+    auto ae = a.end();
+    auto bi = b.begin();
+    auto be = b.end();
+
+    while (ai!=ae && bi!=be) {
+        const V& elem = *ai<*bi? *ai++: *bi++;
+        if (u.empty() || u.back()!=elem) {
+            u.push_back(elem);
+        }
+    }
+
+    while (ai!=ae) {
+        if (u.empty() || u.back()!=elem) {
+            u.push_back(*ai++);
+        }
+    }
+
+    while (bi!=be) {
+        if (u.empty() || u.back()!=elem) {
+            u.push_back(*bi++);
+        }
+    }
+    return u;
+}
+
 } // anonymous namespace
 
 // Convert mcable_map values to a piecewise function over an mcable.
@@ -426,7 +458,6 @@ fvm_size_type location_cv(const branch_pw<fvm_size_type>& bmap, fvm_size_type ml
     return bmap.at(loc.branch).index_of(loc.pos);
 }
 
-// TODO: change to single cell + append as above...
 // CVs are absolute (taken from combined discretization) so do not need to be shifted.
 // Only target numbers need to be shifted.
 fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& right) {
@@ -486,14 +517,125 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
     using util::assign;
     using util::sort_by;
 
-    const mechanism_catalogue& catalogue = *gprop.catalogue;
+    const mechanism_catalogue& catalogue = gprop.catalogue;
+    const fvm_cv_geometry& geometry = D.geometry();
 
-    // Synapses
+    fvm_mechanism_data M;
 
-    struct synapse_unpacked_layout {
-        std::unordered_map<std::string, std::vector<double>> param_value;
-        std::vector<size_type> target_index;
-        std::vector<size_type> cv;
+    // Verify mechanism ion usage, parameter values.
+    auto verify_mechanism = [&gprop](const mechanism_info& info, const mechanism_desc& desc) {
+        const auto& global_ions = gprop.ion_species;
+
+        for (const auto& pv: desc.values()) {
+            if (info.parameters.count(pv.first)) {
+                throw no_such_parameter(name, pv.first);
+            }
+            if (info.parameters.at(pv.first).valid(pv.second)) {
+                throw invalid_parameter_value(name, pv.first, pv.second);
+            }
+        }
+
+        for (const auto& ion: info->ions) {
+            const auto& ion_name = ion.first;
+            const auto& ion_dep = ion.second;
+
+            if (!global_ions.count(ion_name)) {
+                throw cable_cell_error(
+                    "mechanism "+mech_name+" uses ion "+ion_name+ " which is missing in global properties");
+            }
+
+            if (ion_dep.verify_ion_charge) {
+                if (ion_dep.expected_ion_charge!=global_ions.at(ion_name)) {
+                    throw cable_cell_error(
+                        "mechanism "+mech_name+" uses ion "+ion_name+ " expecting a different valence");
+                }
+            }
+        }
+    };
+
+    // Track ion usage of mechanisms so that ions are only instantiated where required.
+    std::unordered_map<std::string, std::vector<size_type>> ion_support;
+    auto update_ion_support = [&ion_support](const mechanism_info& info, const std::vector<size_type>& cvs) {
+        arb_assert(util::is_sorted(cvs));
+
+        if (!info.ions.empty()) {
+            for (const auto& ion: util::keys(info.ions)) {
+                auto& support = ion_support[ion];
+                support = unique_union(support, cvs);
+            }
+        }
+    };
+
+    // Density mechanisms: [TODO ion interactions]
+
+    for (const auto& entry: cells.region_assignments().get<mechanism_desc>()) {
+        const std::string& name = entry.first;
+        mechanism_info info = catalogue[name];
+
+        std::vector<double> param_dflt;
+        fvm_mechanism_config config;
+        config.kind = mechanismKind::density;
+
+        for (auto& p: info.parameters()) {
+            M.param_values.emplace_back(p.first, {});
+            param_dflt.push_back(p.second);
+        }
+
+        mcable_map<double> support;
+        std::vector<mcable_map<double>> param_maps;
+
+        {
+            std::map<std::string, mcable_map<double>> keyed_param_maps;
+            for (auto& on_cable: entry.second) {
+                verify_mechanism(info, on_cable.second);
+                mcable cable = on_cable.first;
+
+                support.insert(cable, 1.);
+                for (auto param_assign: on_cable.second.values()) {
+                    keyed_param_maps[param_assign.first].insert(cable, param_assign.second);
+                }
+            }
+            for (auto& e: config.param_values) {
+                param_maps.push_back(std::move(keyed_param_maps[e.first]));
+            }
+        }
+
+        std::vector<double> param_on_cv(M.param_values.size());
+
+        for (auto cv: make_span(geometry.size())) {
+            double area = 0;
+            util::fill(param_on_cv, 0.);
+
+            for (mcable c: geometry.cables(cv)) {
+                double area_on_cable = embedding.integrate_area(c.banch, pw_over_cable(support, c, 0.));
+                if (!area_on_cable) continue;
+
+                area += area_on_cable;
+                for (auto i: count_along(param_on_cv)) {
+                    param_on_cv[i] += embedding.integrate_area(c.branch, pw_over_cable(pvalues, c, param_dflt[i]));
+                }
+            }
+
+            if (area>0) {
+                double oo_cv_area = 1./D.cv_area[cv];
+                config.cv.push_back(cv);
+                config.norm_area.push_back(area*oo_cv_area);
+                for (auto i: count_along(param_on_cv)) {
+                    config.param_values[i].second.push_back(param_on_cv[i]*oo_cv_area);
+                }
+            }
+        }
+
+        M.mechanisms[name] = std::move(config);
+    }
+
+
+    // Synapses:
+
+    struct synapse_instance {
+        size_type cv;
+        std::map<std::string, double> param_value; // uses ordering of std::map
+        size_type target_index;
     };
 
     branch_pw_unsigned bmap = branch_to_cv_map(D.geometry(), cell_idx);
@@ -501,31 +643,111 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
     for (const auto& entry: cells.synapses()) {
         const std::string& name = entry.first;
         mechanism_info info = catalogue[name];
+        std::map<std::string, double> default_param_value;
+        std::vector<synapse_instance> sl;
 
-        synapse_unpacked_layout sl;
-        for (const placed<mechanism_desc>& pm: entry.second) {
-            for (const auto& kv: info.parameters) {
-                sl.param_value[kv.first].push_back(kv.second.default_value);
-            }
-
-            for (const auto& kv: pm.item.values()) {
-                sl.at(kv.first) = kv.second;
-            }
-
-            sl.target_index.push_back(pm.lid);
-            sl.cv.push_back(location_cv(bmap, pm.loc));
+        for (const auto& kv: info.parameters) {
+            default_param_value[kv.first] = kv.second.default_value;
         }
 
-        // Permute synapse instances so that they are in increasing CV order;
-        // cv_order[i] is the index of the ith instance by increasing CV.
+        for (const placed<mechanism_desc>& pm: entry.second) {
+            verify_mechanism(info, pm.item);
+
+            synapse_instance in;
+            in.param_value = default_param_value;
+
+            for (const auto& kv: pm.item.values()) {
+                in.param_value.at(kv.first) = kv.second;
+            }
+
+            in.target_index = pm.lid;
+            in.cv = location_cv(bmap, pm.loc);
+            sl.push_back(std::move(in));
+        }
+
+        // Permute synapse instances so that they are in increasing order
+        // (lexicographically) by CV, param_value set, and target, so that
+        // instances in the same CV with the same parameter values are adjacent.
+        // cv_order[i] is the index of the ith instance by this ordering.
 
         std::vector<size_type> cv_order;
         assign(cv_order, count_along(sl));
-        sort_by(cv_order, [&](size_type i) { return sl.cv[i]; });
+        sort_by(cv_order, [&](size_type i) {
+            return std::tie(sl[i].cv, sl[i].param_value, sl[i].target_index);
+        });
 
-...;
+        bool coalesce = catalogue[name].linear && gprop.coalesce_synapses;
+
+        fvm_mechanism_config config;
+        config.kind = mechanismKind::point;
+        for (auto& pentry: default_param_value) {
+            config.param_values.push_back(pentry.first, {});
+        }
+
+        const synapse_instance* prev = nullptr;
+        for (auto i: cv_order) {
+            const auto& in = sl[i];
+
+            if (coalesce && prev && prev->cv==in.cv && prev->param_value==in.param_value) {
+                ++config.multiplicity.back();
+            }
+            else {
+                config.cv.push_back(in.cv);
+                config.multiplicity.push_back(1);
+
+                unsigned j = 0;
+                for (auto& pentry: in.param_value) {
+                    arb_assert(config.param_values[j].first==pentry.first);
+                    config.param_values[j++].second.push_back(pentry.second);
+                }
+            }
+            config.target.push_back(in.target);
+
+            prev = &in;
+        }
+
+        // If no combined synapses, we can throw away multiplicity.
+        if (config.target.size()==config.multiplicity.size()) {
+            config.multiplicity.clear();
+        }
+
+        // If synapse uses an ion, add to ion support.
+        update_ion_support(info, config.cv);
+
+        M.mechanisms[name] = std::move(config);
     }
 
+    // Stimuli:
+
+    if (!cells.stimuli().empty()) {
+        const auto& stimuli = cells.stimuli();
+
+        std::vector<size_type> stimuli_cv;
+        assign_by(stimuli_cv, stimuli, [&bmap](auto& p) { return location_cv(bmap, p.loc); });
+
+        std::vector<size_type> cv_order;
+        assign(cv_order, count_along(stimuli));
+        sort_by(cv_order, [&](size_type i) { return stimuli_cv[i]; });
+
+        fvm_mechanism_config config;
+        config.kind = mechanismKind::point;
+        config.param_values = {{"amplitude", {}}, {"delay", {}}, {"duration", {}}};
+
+        for (auto cv: cv_order) {
+            config.cv.push_back(cv);
+            config.param_values[0].second.push_back(stimuli[cv].item.amplitude);
+            config.param_values[1].second.push_back(stimuli[cv].item.delay);
+            config.param_values[2].second.push_back(stimuli[cv].item.duration);
+        }
+
+        M.mechanisms["_builtin_stimulus"] = std::move(config);
+    }
+
+    // Ions:
+
+    // [TODO]
+
+    return M;
 }
 
 using util::keys;

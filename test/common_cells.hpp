@@ -13,6 +13,7 @@ class soma_cell_builder {
     sample_tree tree;
     std::vector<msize_t> branch_distal_id;
     std::unordered_map<std::string, int> tag_map;
+    locset cv_boundaries = mlocation{0, 1.};
     int tag_count = 0;
 
     // Get tag id of region.
@@ -47,6 +48,7 @@ public:
 
         p = tree.append(p, {{0,0,z,r1}, tag});
         if (ncomp>1) {
+            // TODO: remove last parameter when segments disappear.
             double dz = len/ncomp;
             double dr = (r2-r1)/ncomp;
             for (auto i=1; i<ncomp; ++i) {
@@ -56,7 +58,11 @@ public:
         p = tree.append(p, {{0,0,z+len,r2}, tag});
         branch_distal_id.push_back(p);
 
-        return branch_distal_id.size()-1;
+        msize_t bid = branch_distal_id.size()-1;
+        for (int i = 0; i<ncomp; ++i) {
+            cv_boundaries = ls::sum(cv_boundaries,  mlocation{bid, (2*i+1.)/(2.*ncomp)});
+        }
+        return bid;
     }
 
     cable_cell make_cell() const {
@@ -79,9 +85,9 @@ public:
         }
 
         // Make cable_cell from sample tree and dictionary.
-        // The true flag is used to force the discretization to make compartments
-        // at sample points.
-        return cable_cell(tree, dict, true);
+        cable_cell c(tree, dict, true); // TODO: remove last parameter when segments disappear.
+        c.discretization = cv_policy_explicit(cv_boundaries);
+        return c;
     }
 };
 
