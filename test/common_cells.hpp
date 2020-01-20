@@ -60,7 +60,7 @@ public:
 
         msize_t bid = branch_distal_id.size()-1;
         for (int i = 0; i<ncomp; ++i) {
-            cv_boundaries = ls::sum(cv_boundaries,  mlocation{bid, (2*i+1.)/(2.*ncomp)});
+            cv_boundaries = sum(cv_boundaries,  mlocation{bid, (2*i+1.)/(2.*ncomp)});
         }
         return bid;
     }
@@ -86,7 +86,7 @@ public:
 
         // Make cable_cell from sample tree and dictionary.
         cable_cell c(tree, dict, true); // TODO: remove last parameter when segments disappear.
-        c.discretization = cv_policy_explicit(cv_boundaries);
+        c.default_parameters.discretization = cv_policy_explicit(cv_boundaries);
         return c;
     }
 };

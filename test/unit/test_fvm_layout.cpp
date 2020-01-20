@@ -41,23 +41,6 @@ namespace {
         }
     }
 
-    double volume(const segment* s) {
-        if (auto soma = s->as_soma()) {
-            return math::volume_sphere(soma->radius());
-        }
-        else if (auto cable = s->as_cable()) {
-            unsigned nc = cable->num_sub_segments();
-            double v = 0;
-            for (unsigned i = 0; i<nc; ++i) {
-                v += math::volume_frustrum(cable->lengths()[i], cable->radii()[i], cable->radii()[i+1]);
-            }
-            return v;
-        }
-        else {
-            return 0;
-        }
-    }
-
     std::vector<cable_cell> two_cell_system() {
         std::vector<cable_cell> cells;
 
@@ -135,7 +118,7 @@ TEST(fvm_layout, mech_index) {
     cable_cell_global_properties gprop;
     gprop.default_parameters = neuron_parameter_defaults;
 
-    fvm_discretization D = fvm_discretize(cells, gprop.default_parameters);
+    fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters);
     fvm_mechanism_data M = fvm_build_mechanism_data(gprop, cells, D);
 
     auto& hh_config = M.mechanisms.at("hh");
@@ -252,7 +235,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, "expsyn");
         cell.place(mlocation{1, 0.9}, "expsyn");
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         auto &expsyn_config = M.mechanisms.at("expsyn");
@@ -268,7 +251,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, "expsyn");
         cell.place(mlocation{1, 0.9}, "exp2syn");
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         auto &expsyn_config = M.mechanisms.at("expsyn");
@@ -287,7 +270,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, "expsyn");
         cell.place(mlocation{1, 0.9}, "expsyn");
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_no_coalesce, {cell}, D);
 
         auto &expsyn_config = M.mechanisms.at("expsyn");
@@ -303,7 +286,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, "expsyn");
         cell.place(mlocation{1, 0.9}, "exp2syn");
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_no_coalesce, {cell}, D);
 
         auto &expsyn_config = M.mechanisms.at("expsyn");
@@ -323,7 +306,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, "expsyn");
         cell.place(mlocation{1, 0.7}, "expsyn");
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         auto &expsyn_config = M.mechanisms.at("expsyn");
@@ -339,7 +322,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.3}, syn_desc("expsyn", 0.1, 0.2));
         cell.place(mlocation{1, 0.7}, syn_desc("expsyn", 0.1, 0.2));
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         std::vector<exp_instance> instances{
@@ -365,7 +348,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.3}, syn_desc("expsyn", 0, 2));
         cell.place(mlocation{1, 0.3}, syn_desc("expsyn", 1, 2));
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         std::vector<exp_instance> instances{
@@ -394,7 +377,7 @@ TEST(fvm_layout, coalescing_synapses) {
         cell.place(mlocation{1, 0.7}, syn_desc_2("exp2syn", 2, 1));
         cell.place(mlocation{1, 0.7}, syn_desc_2("exp2syn", 2, 2));
 
-        fvm_discretization D = fvm_discretize({cell}, neuron_parameter_defaults);
+        fvm_cv_discretization D = fvm_cv_discretize({cell}, neuron_parameter_defaults);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop_coalesce, {cell}, D);
 
         for (auto &instance: {exp_instance(2, L{0,2,5}, 1, 2),
@@ -441,7 +424,7 @@ TEST(fvm_layout, synapse_targets) {
     cable_cell_global_properties gprop;
     gprop.default_parameters = neuron_parameter_defaults;
 
-    fvm_discretization D = fvm_discretize(cells, gprop.default_parameters);
+    fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters);
     fvm_mechanism_data M = fvm_build_mechanism_data(gprop, cells, D);
 
     ASSERT_EQ(1u, M.mechanisms.count("expsyn"));
@@ -594,7 +577,7 @@ TEST(fvm_layout, density_norm_area) {
     cable_cell_global_properties gprop;
     gprop.default_parameters = neuron_parameter_defaults;
 
-    fvm_discretization D = fvm_discretize(cells, gprop.default_parameters);
+    fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters);
     fvm_mechanism_data M = fvm_build_mechanism_data(gprop, cells, D);
 
     // Grab the HH parameters from the mechanism.
@@ -618,7 +601,7 @@ TEST(fvm_layout, valence_verify) {
     cable_cell_global_properties gprop;
     gprop.default_parameters = neuron_parameter_defaults;
 
-    fvm_discretization D = fvm_discretize(cells, neuron_parameter_defaults);
+    fvm_cv_discretization D = fvm_cv_discretize(cells, neuron_parameter_defaults);
 
     mechanism_catalogue testcat = make_unit_test_catalogue();
     gprop.catalogue = &testcat;
@@ -707,7 +690,7 @@ TEST(fvm_layout, ion_weights) {
 
         std::vector<cable_cell> cells{std::move(c)};
 
-        fvm_discretization D = fvm_discretize(cells, gprop.default_parameters);
+        fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters);
         fvm_mechanism_data M = fvm_build_mechanism_data(gprop, cells, D);
 
         ASSERT_EQ(1u, M.ions.count("ca"s));
@@ -761,7 +744,7 @@ TEST(fvm_layout, revpot) {
         auto test_gprop = gprop;
         test_gprop.default_parameters.reversal_potential_method["b"] = write_eb_ec;
 
-        fvm_discretization D = fvm_discretize(cells, test_gprop.default_parameters);
+        fvm_cv_discretization D = fvm_cv_discretize(cells, test_gprop.default_parameters);
         EXPECT_THROW(fvm_build_mechanism_data(test_gprop, cells, D), cable_cell_error);
     }
 
@@ -772,7 +755,7 @@ TEST(fvm_layout, revpot) {
         test_gprop.default_parameters.reversal_potential_method["c"] = write_eb_ec;
         cells[1].default_parameters.reversal_potential_method["c"] = "write_eX/c";
 
-        fvm_discretization D = fvm_discretize(cells, test_gprop.default_parameters);
+        fvm_cv_discretization D = fvm_cv_discretize(cells, test_gprop.default_parameters);
         EXPECT_THROW(fvm_build_mechanism_data(test_gprop, cells, D), cable_cell_error);
     }
 
@@ -781,12 +764,12 @@ TEST(fvm_layout, revpot) {
     cell1_prop.reversal_potential_method["b"] = write_eb_ec;
     cell1_prop.reversal_potential_method["c"] = write_eb_ec;
 
-    fvm_discretization D = fvm_discretize(cells, gprop.default_parameters);
+    fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters);
     fvm_mechanism_data M = fvm_build_mechanism_data(gprop, cells, D);
 
     // Only CV which needs write_multiple_eX/x=b,y=c is the soma (first CV)
     // of the second cell.
-    auto soma1_index = D.cell_cv_bounds[1];
+    auto soma1_index = D.geometry.cell_cv_divs[1];
     ASSERT_EQ(1u, M.mechanisms.count(write_eb_ec.name()));
     EXPECT_EQ((std::vector<fvm_index_type>(1, soma1_index)), M.mechanisms.at(write_eb_ec.name()).cv);
 }

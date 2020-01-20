@@ -28,12 +28,15 @@ using util::value_by_key;
 using util::count_along;
 using util::optional;
 using util::pw_elements;
+using util::pw_element;
 using util::sum_by;
 
 namespace {
 struct get_value {
     template <typename X>
     double operator()(const X& x) const { return x.value; }
+
+    double operator()(double x) const { return x; }
 };
 
 template <typename V>
@@ -60,14 +63,16 @@ std::vector<V> unique_union(const std::vector<V>& a, const std::vector<V>& b) {
     }
 
     while (ai!=ae) {
+        const V& elem = *ai++;
         if (u.empty() || u.back()!=elem) {
-            u.push_back(*ai++);
+            u.push_back(elem);
         }
     }
 
     while (bi!=be) {
+        const V& elem = *bi++;
         if (u.empty() || u.back()!=elem) {
-            u.push_back(*bi++);
+            u.push_back(elem);
         }
     }
     return u;
@@ -239,7 +244,7 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
                 // Add trivial CV for lindep.
                 geom.cv_parent.push_back(this_cv);
                 geom.cv_cables.push_back(mcable{cable.branch, 1., 1.});
-                geom.cv_cables_divs.push_back(geom.cv_cables.size());
+                geom.cv_cables_divs.push_back((fvm_index_type)geom.cv_cables.size());
                 parent_map[term] = cv_index++;
             }
             else {
@@ -252,7 +257,22 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
 
     // Fill cv/cell mapping for single cell (index 0).
     geom.cv_to_cell.assign(cv_index, 0);
-    geom.cell_cv_divs = {0, cv_index};
+    geom.cell_cv_divs = {0, (fvm_index_type)cv_index};
+
+    // Build location query map.
+    geom.branch_cv_map.resize(1);
+    std::vector<util::pw_elements<fvm_size_type>>& bmap = geom.branch_cv_map.back();
+
+    for (auto cv: util::make_span(geom.size())) {
+        for (auto cable: geom.cables(cv)) {
+            if (cable.branch>=bmap.size()) {
+                bmap.resize(cable.branch+1);
+            }
+
+            // Ordering of CV ensures CV cables on any given branch are found sequentially.
+            bmap[cable.branch].push_back(cable.prox_pos, cable.dist_pos, cv);
+        }
+    }
 
     return geom;
 }
@@ -306,6 +326,8 @@ cv_geometry& append(cv_geometry& geom, const cv_geometry& right) {
     append_offset(geom.cv_parent, geom_n_cv, right.cv_parent);
     append_offset(geom.cv_to_cell, geom_n_cell, right.cv_to_cell);
     append_divs(geom.cell_cv_divs, right.cell_cv_divs);
+
+    append(geom.branch_cv_map, right.branch_cv_map);
     return geom;
 }
 
@@ -432,36 +454,11 @@ fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells,
     return combined;
 }
 
-template <typename T>
-using branch_pw<T> = std::vector<util::pw_elements<T>>;
-
-// Return piece-wise constant map over branches on a single cell corresponding to CV index.
-// CV ordering ensures monotonicity in branches.
-branch_pw<fvm_size_type> branch_to_cv_map(const cv_geometry& geom, fvm_size_type cell_idx) {
-    branch_pw<fvm_size_type> bmap;
-
-    for (auto cv: util::make_span(geom.cell_cv_interval(cell_idx))) {
-        for (auto cable: geom.cables(cv)) {
-            if (cable.branch>=bmap.size()) {
-                bmap.resize(cable.branch+1);
-            }
-
-            // Ordering of CV ensures CV cables on any given branch are found sequentially.
-            bmap[cable.branch].append(cable.prox_pos, cable.dist_pos, cv);
-        }
-    }
-
-    return bmap;
-}
-
-fvm_size_type location_cv(const branch_pw<fvm_size_type>& bmap, fvm_size_type mlocation loc) {
-    return bmap.at(loc.branch).index_of(loc.pos);
-}
-
 // CVs are absolute (taken from combined discretization) so do not need to be shifted.
 // Only target numbers need to be shifted.
 fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& right) {
     using util::append;
+    using impl::append_offset;
 
     fvm_size_type target_offset = left.ntarget;
 
@@ -477,8 +474,8 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
     }
 
     for (const auto& kv: right.mechanisms) {
-        fvm_mechanism_data& L = left.mechansims[kv.first];
-        const fvm_mechanism_data& R = kv.second;
+        fvm_mechanism_config& L = left.mechanisms[kv.first];
+        const fvm_mechanism_config& R = kv.second;
 
         L.kind = R.kind;
         append(L.cv, R.cv);
@@ -495,10 +492,13 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
             append(L.param_values[j].second, R.param_values[j].second);
         }
     }
-    left.ntarget += R.ntarget;
+    left.ntarget += right.ntarget;
 
     return left;
 }
+
+fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop,
+    const cable_cell& cell, const fvm_cv_discretization& D, fvm_size_type cell_idx);
 
 fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop,
     const std::vector<cable_cell>& cells, const fvm_cv_discretization& D)
@@ -514,11 +514,17 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
     const cable_cell& cell, const fvm_cv_discretization& D, fvm_size_type cell_idx)
 {
     using size_type = fvm_size_type;
+    using index_type = fvm_index_type;
+    using value_type = fvm_value_type;
+
     using util::assign;
     using util::sort_by;
 
-    const mechanism_catalogue& catalogue = gprop.catalogue;
-    const fvm_cv_geometry& geometry = D.geometry();
+    const mechanism_catalogue& catalogue = *gprop.catalogue;
+    const auto& embedding = cell.embedding();
+
+    const auto& global_dflt = gprop.default_parameters;
+    const auto& dflt = cell.default_parameters;
 
     fvm_mechanism_data M;
 
@@ -528,47 +534,52 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
         for (const auto& pv: desc.values()) {
             if (info.parameters.count(pv.first)) {
-                throw no_such_parameter(name, pv.first);
+                throw no_such_parameter(desc.name(), pv.first);
             }
             if (info.parameters.at(pv.first).valid(pv.second)) {
-                throw invalid_parameter_value(name, pv.first, pv.second);
+                throw invalid_parameter_value(desc.name(), pv.first, pv.second);
             }
         }
 
-        for (const auto& ion: info->ions) {
+        for (const auto& ion: info.ions) {
             const auto& ion_name = ion.first;
             const auto& ion_dep = ion.second;
 
             if (!global_ions.count(ion_name)) {
                 throw cable_cell_error(
-                    "mechanism "+mech_name+" uses ion "+ion_name+ " which is missing in global properties");
+                    "mechanism "+desc.name()+" uses ion "+ion_name+ " which is missing in global properties");
             }
 
             if (ion_dep.verify_ion_charge) {
                 if (ion_dep.expected_ion_charge!=global_ions.at(ion_name)) {
                     throw cable_cell_error(
-                        "mechanism "+mech_name+" uses ion "+ion_name+ " expecting a different valence");
+                        "mechanism "+desc.name()+" uses ion "+ion_name+ " expecting a different valence");
                 }
+            }
+
+            if (ion_dep.write_reversal_potential && (ion_dep.write_concentration_int || ion_dep.write_concentration_ext)) {
+                throw cable_cell_error("mechanism "+desc.name()+" writes both reversal potential and concentration");
             }
         }
     };
 
     // Track ion usage of mechanisms so that ions are only instantiated where required.
-    std::unordered_map<std::string, std::vector<size_type>> ion_support;
-    auto update_ion_support = [&ion_support](const mechanism_info& info, const std::vector<size_type>& cvs) {
+    std::unordered_map<std::string, std::vector<index_type>> ion_support;
+    auto update_ion_support = [&ion_support](const mechanism_info& info, const std::vector<index_type>& cvs) {
         arb_assert(util::is_sorted(cvs));
 
-        if (!info.ions.empty()) {
-            for (const auto& ion: util::keys(info.ions)) {
-                auto& support = ion_support[ion];
-                support = unique_union(support, cvs);
-            }
+        for (const auto& ion: util::keys(info.ions)) {
+            auto& support = ion_support[ion];
+            support = unique_union(support, cvs);
         }
     };
 
-    // Density mechanisms: [TODO ion interactions]
+    std::unordered_map<std::string, mcable_map<double>> init_iconc_mask;
+    std::unordered_map<std::string, mcable_map<double>> init_econc_mask;
 
-    for (const auto& entry: cells.region_assignments().get<mechanism_desc>()) {
+    // Density mechanisms:
+
+    for (const auto& entry: cell.region_assignments().get<mechanism_desc>()) {
         const std::string& name = entry.first;
         mechanism_info info = catalogue[name];
 
@@ -576,9 +587,9 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         fvm_mechanism_config config;
         config.kind = mechanismKind::density;
 
-        for (auto& p: info.parameters()) {
-            M.param_values.emplace_back(p.first, {});
-            param_dflt.push_back(p.second);
+        for (auto& p: info.parameters) {
+            config.param_values.emplace_back(p.first, std::vector<value_type>{});
+            param_dflt.push_back(p.second.default_value);
         }
 
         mcable_map<double> support;
@@ -600,19 +611,19 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             }
         }
 
-        std::vector<double> param_on_cv(M.param_values.size());
+        std::vector<double> param_on_cv(config.param_values.size());
 
-        for (auto cv: make_span(geometry.size())) {
+        for (auto cv: util::make_span(D.geometry.size())) {
             double area = 0;
             util::fill(param_on_cv, 0.);
 
-            for (mcable c: geometry.cables(cv)) {
-                double area_on_cable = embedding.integrate_area(c.banch, pw_over_cable(support, c, 0.));
+            for (mcable c: D.geometry.cables(cv)) {
+                double area_on_cable = embedding.integrate_area(c.branch, pw_over_cable(support, c, 0.));
                 if (!area_on_cable) continue;
 
                 area += area_on_cable;
                 for (auto i: count_along(param_on_cv)) {
-                    param_on_cv[i] += embedding.integrate_area(c.branch, pw_over_cable(pvalues, c, param_dflt[i]));
+                    param_on_cv[i] += embedding.integrate_area(c.branch, pw_over_cable(param_maps[i], c, param_dflt[i]));
                 }
             }
 
@@ -626,6 +637,26 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             }
         }
 
+        for (const auto& iondep: info.ions) {
+            if (iondep.second.write_concentration_int) {
+                for (auto c: support) {
+                    bool ok = init_iconc_mask[iondep.first].insert(c.first, 0.);
+                    if (!ok) {
+                        throw cable_cell_error("overlapping ion concentration writing mechanism "+name);
+                    }
+                }
+            }
+            if (iondep.second.write_concentration_ext) {
+                for (auto c: support) {
+                    bool ok = init_econc_mask[iondep.first].insert(c.first, 0.);
+                    if (!ok) {
+                        throw cable_cell_error("overlapping ion concentration writing mechanism "+name);
+                    }
+                }
+            }
+        }
+
+        update_ion_support(info, config.cv);
         M.mechanisms[name] = std::move(config);
     }
 
@@ -638,9 +669,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         size_type target_index;
     };
 
-    branch_pw_unsigned bmap = branch_to_cv_map(D.geometry(), cell_idx);
-
-    for (const auto& entry: cells.synapses()) {
+    for (const auto& entry: cell.synapses()) {
         const std::string& name = entry.first;
         mechanism_info info = catalogue[name];
         std::map<std::string, double> default_param_value;
@@ -661,7 +690,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             }
 
             in.target_index = pm.lid;
-            in.cv = location_cv(bmap, pm.loc);
+            in.cv = D.geometry.location_cv(cell_idx, pm.loc);
             sl.push_back(std::move(in));
         }
 
@@ -681,7 +710,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         fvm_mechanism_config config;
         config.kind = mechanismKind::point;
         for (auto& pentry: default_param_value) {
-            config.param_values.push_back(pentry.first, {});
+            config.param_values.emplace_back(pentry.first, std::vector<value_type>{});
         }
 
         const synapse_instance* prev = nullptr;
@@ -701,7 +730,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
                     config.param_values[j++].second.push_back(pentry.second);
                 }
             }
-            config.target.push_back(in.target);
+            config.target.push_back(in.target_index);
 
             prev = &in;
         }
@@ -719,11 +748,11 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
     // Stimuli:
 
-    if (!cells.stimuli().empty()) {
-        const auto& stimuli = cells.stimuli();
+    if (!cell.stimuli().empty()) {
+        const auto& stimuli = cell.stimuli();
 
         std::vector<size_type> stimuli_cv;
-        assign_by(stimuli_cv, stimuli, [&bmap](auto& p) { return location_cv(bmap, p.loc); });
+        util::assign_by(stimuli_cv, stimuli, [&D, cell_idx](auto& p) { return D.geometry.location_cv(cell_idx, p.loc); });
 
         std::vector<size_type> cv_order;
         assign(cv_order, count_along(stimuli));
@@ -745,1018 +774,97 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
     // Ions:
 
-    // [TODO]
+    std::unordered_map<std::string, mechanism_desc> revpot_tbl;
+    auto initial_ion_data_map = cell.region_assignments().get<initial_ion_data>();
 
-    return M;
-}
+    for (const auto& ion_cvs: ion_support) {
+        const std::string& ion = ion_cvs.first;
 
-using util::keys;
-using util::make_span;
-using util::subrange_view;
-using util::transform_view;
+        fvm_ion_config config;
+        config.cv = ion_cvs.second;
 
-// Convenience routines
+        auto n_cv = config.cv.size();
+        config.init_iconc.resize(n_cv);
+        config.init_econc.resize(n_cv);
+        config.reset_iconc.resize(n_cv);
+        config.reset_econc.resize(n_cv);
+        config.init_revpot.resize(n_cv);
 
-namespace {
-    template <typename ResizableContainer, typename Index>
-    void extend_to(ResizableContainer& c, const Index& i) {
-        if (util::size(c)<=i) {
-            c.resize(i+1);
+        cable_cell_ion_data ion_data = *(value_by_key(dflt.ion_data, ion) | value_by_key(global_dflt.ion_data, ion));
+        double dflt_iconc = ion_data.init_int_concentration;
+        double dflt_econc = ion_data.init_ext_concentration;
+        double dflt_rvpot = ion_data.init_reversal_potential;
+
+        const mcable_map<initial_ion_data>& ion_on_cable = initial_ion_data_map[ion];
+
+        auto pw_times = [](const pw_elements<double>& a, const pw_elements<double>& b) {
+            return zip(a, b, [](double left, double right, pw_element<double> a, pw_element<double> b) { return a.second*b.second; });
+        };
+
+        for (auto cv: config.cv) {
+            if (D.cv_area[cv]==0) continue;
+
+            for (mcable c: D.geometry.cables(cv)) {
+                auto iconc = pw_over_cable(ion_on_cable, c, dflt_iconc, [](auto x) { return x.initial.init_int_concentration; });
+                auto econc = pw_over_cable(ion_on_cable, c, dflt_econc, [](auto x) { return x.initial.init_ext_concentration; });
+                auto rvpot = pw_over_cable(ion_on_cable, c, dflt_rvpot, [](auto x) { return x.initial.init_reversal_potential; });
+
+                config.reset_iconc[cv] += embedding.integrate_area(c.branch, iconc);
+                config.reset_econc[cv] += embedding.integrate_area(c.branch, econc);
+                config.init_revpot[cv] += embedding.integrate_area(c.branch, rvpot);
+
+                auto iconc_masked = pw_times(pw_over_cable(init_iconc_mask[ion], c, 1.), iconc);
+                auto econc_masked = pw_times(pw_over_cable(init_econc_mask[ion], c, 1.), econc);
+
+                config.init_iconc[cv] += embedding.integrate_area(c.branch, iconc_masked);
+                config.init_econc[cv] += embedding.integrate_area(c.branch, econc_masked);
+            }
+
+            double oo_cv_area = 1./D.cv_area[cv];
+            config.reset_iconc[cv] *= oo_cv_area;
+            config.reset_econc[cv] *= oo_cv_area;
+            config.init_revpot[cv] *= oo_cv_area;
+            config.init_iconc[cv] *= oo_cv_area;
+            config.init_iconc[cv] *= oo_cv_area;
         }
-    }
 
-    template <typename ResizableContainer, typename Index>
-    auto& extend_at(ResizableContainer& c, const Index& i) {
-        if (util::size(c)<=i) {
-            c.resize(i+1);
-        }
-        return c[i];
-    }
+        M.ions[ion] = std::move(config);
 
-    struct compartment_model {
-        arb::tree tree;
-        std::vector<tree::int_type> parent_index;
-        std::vector<tree::int_type> segment_index;
+        if (auto maybe_revpot = value_by_key(dflt.reversal_potential_method, ion)
+                              | value_by_key(global_dflt.reversal_potential_method, ion))
+        {
+            const mechanism_desc& revpot = *maybe_revpot;
+            mechanism_info info = catalogue[revpot.name()];
+            verify_mechanism(info, revpot);
 
-        explicit compartment_model(const cable_cell& cell) {
-            tree = arb::tree(cell.parents());
-            auto counts = cell.compartment_counts();
-            for (unsigned i = 0; i < cell.segments().size(); i++) {
-                if (!cell.segment(i)->is_soma() && cell.parent(i)->is_soma()) {
-                    counts[i]++;
+            if (revpot_tbl.count(ion)) {
+                auto& existing_revpot_desc = revpot_tbl.at(ion);
+                if (existing_revpot_desc.name() != revpot.name() || existing_revpot_desc.values() != revpot.values()) {
+                    throw cable_cell_error("inconsistent revpot ion assignment for mechanism "+revpot.name());
                 }
-            }
-            parent_index = make_parent_index(tree, counts);
-            segment_index = algorithms::make_index(counts);
-        }
-    };
-
-    struct cv_param {
-        fvm_size_type cv;
-        std::vector<fvm_value_type> params;
-        fvm_size_type target;
-    };
-
-    ARB_DEFINE_LEXICOGRAPHIC_ORDERING(cv_param,(a.cv,a.params,a.target),(b.cv,b.params,b.target))
-
-    // For each segment given by the provided sorted sequence of segment
-    // indices, call `action` for each CV intersecting the segment, starting
-    // from the most proximal.
-    //
-    // By the ordering of CVs and segments in the discretization, with the
-    // exception of the most proximal CV in a segment, each CV will be visited
-    // once, and the visited CVs will be in increasing order. The most proximal
-    // CV (the 'parent' CV) may be visited multiple times.
-    //
-    // Action is a functional that takes the following arguments:
-    //
-    //     size_type  cv_index   The index into the total (sorted) list of
-    //                           CVs that constitute the segments.
-    //
-    //     index_type cv         The CV number (within the discretization).
-    //
-    //     value_type cv_area    The area of the CV that lies within the
-    //                           current segment.
-    //
-    //     index_type seg_index  The index into the provided sequence of
-    //                           the provided segment_indices.
-    //
-    //     index_type seg        The segment currently being iterated over.
-
-    template <typename Seq, typename Action>
-    void for_each_cv_in_segments(const fvm_discretization& D, const Seq& segment_indices, const Action& action) {
-        using index_type = fvm_index_type;
-        using size_type = fvm_size_type;
-
-        std::unordered_map<index_type, size_type> parent_cv_indices;
-        size_type cv_index = 0;
-
-        index_type seg_index = 0;
-        for (const auto& seg: segment_indices) {
-            const segment_info& seg_info = D.segments[seg];
-
-            if (seg_info.has_parent()) {
-                index_type cv = seg_info.parent_cv;
-
-                size_type i = parent_cv_indices.insert({cv, cv_index}).first->second;
-                if (i==cv_index) {
-                    ++cv_index;
-                }
-
-                action(i, cv, seg_info.parent_cv_area, seg_index, seg);
-            }
-
-            for (index_type cv = seg_info.proximal_cv; cv < seg_info.distal_cv; ++cv) {
-                index_type i = cv_index++;
-                action(i, cv, D.cv_area[cv], seg_index, seg);
-            }
-
-            index_type cv = seg_info.distal_cv;
-            size_type i = cv_index++;
-
-            action(i, seg_info.distal_cv, seg_info.distal_cv_area, seg_index, seg);
-            parent_cv_indices.insert({cv, i});
-            ++seg_index;
-        }
-    }
-
-} // namespace
-
-// Cable segment discretization
-// ----------------------------
-//
-// Each compartment i straddles the ith control volume on the right
-// and the jth control volume on the left, where j is the parent index
-// of i.
-//
-// Dividing the comparment into two halves, the centre face C
-// corresponds to the shared face between the two control volumes,
-// the surface areas in each half contribute to the surface area of
-// the respective control volumes, and the volumes and lengths of
-// each half are used to calculate the flux coefficients that
-// for the connection between the two control volumes and which
-// is stored in `face_conductance[i]`.
-//
-//
-//  +------- cv j --------+------- cv i -------+
-//  |                     |                    |
-//  v                     v                    v
-//  ____________________________________________
-//  | ........ | ........ |          |         |
-//  | ........ L ........ C          R         |
-//  |__________|__________|__________|_________|
-//             ^                     ^
-//             |                     |
-//             +--- compartment i ---+
-//
-// The first control volume of any cell corresponds to the soma
-// and the first half of the first cable compartment of that cell.
-//
-//
-// Face conductance computation
-// ----------------------------
-//
-// The conductance between two adjacent CVs is computed as follows,
-// computed in terms of the two half CVs on either side of the interface,
-// correspond to the regions L–C and C–R in the diagram above.
-//
-// The conductance itself is approximated by the weighted harmonic mean
-// of the mean linear conductivities in each half, corresponding to
-// the two-point flux approximation in 1-D.
-//
-// Mean linear conductivities:
-//
-//     g₁ = 1/h₁ ∫₁ A(x)/R dx
-//     g₂ = 1/h₂ ∫₂ A(x)/R dx
-//
-// where A(x) is the cross-sectional area, R is the bulk resistivity,
-// and h is the width of the region. The integrals are taken over the
-// half CVs as described above.
-//
-// Equivalently, in terms of the semi-compartment volumes V₁ and V₂:
-//
-//     g₁ = 1/R·V₁/h₁
-//     g₂ = 1/R·V₂/h₂
-//
-// Weighted harmonic mean, with h = h₁+h₂:
-//
-//     g = (h₁/h·g₁¯¹+h₂/h·g₂¯¹)¯¹
-//       = 1/R · hV₁V₂/(h₂²V₁+h₁²V₂)
-//
-
-fvm_discretization fvm_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& global_defaults) {
-
-    using value_type = fvm_value_type;
-    using index_type = fvm_index_type;
-    using size_type = fvm_size_type;
-
-    fvm_discretization D;
-
-    util::make_partition(D.cell_segment_bounds,
-        transform_view(cells, [](const cable_cell& c) { return c.num_branches(); }));
-
-    std::vector<index_type> cell_cv_bounds;
-    auto cell_cv_part = make_partition(cell_cv_bounds,
-        transform_view(cells, [](const cable_cell& c) {
-            unsigned ncv = 0;
-            for (unsigned i = 0; i < c.segments().size(); i++) {
-                ncv += c.segment(i)->num_compartments();
-                if (!c.segment(i)->is_soma() && c.parent(i)->is_soma()) {
-                    ncv++;
-                }
-            }
-            return ncv;
-        }));
-
-    D.ncell = cells.size();
-    D.ncv = cell_cv_part.bounds().second;
-
-    D.face_conductance.assign(D.ncv, 0.);
-    D.cv_area.assign(D.ncv, 0.);
-    D.cv_capacitance.assign(D.ncv, 0.);
-    D.init_membrane_potential.assign(D.ncv, 0.);
-    D.temperature_K.assign(D.ncv, 0.);
-    D.diam_um.assign(D.ncv, 0.);
-    D.parent_cv.assign(D.ncv, index_type(-1));
-    D.cv_to_cell.resize(D.ncv);
-    for (auto i: make_span(0, D.ncell)) {
-        util::fill(subrange_view(D.cv_to_cell, cell_cv_part[i]), static_cast<index_type>(i));
-    }
-
-    std::vector<size_type> seg_cv_bounds;
-    for (auto i: make_span(0, D.ncell)) {
-        const auto& c = cells[i];
-        compartment_model cell_graph(c);
-        auto cell_cv_ival = cell_cv_part[i];
-
-        auto cell_cv_base = cell_cv_ival.first;
-        for (auto k: make_span(cell_cv_ival)) {
-            D.parent_cv[k] = cell_graph.parent_index[k-cell_cv_base]+cell_cv_base;
-        }
-
-        // Electrical defaults from global defaults, possibly overridden by cell.
-        auto cm_default = c.default_parameters.membrane_capacitance | global_defaults.membrane_capacitance;
-        auto rL_default = c.default_parameters.axial_resistivity | global_defaults.axial_resistivity;
-        auto init_vm_default = c.default_parameters.init_membrane_potential | global_defaults.init_membrane_potential;
-        auto temp_default = c.default_parameters.temperature_K | global_defaults.temperature_K;
-
-        // Compartment index range for each segment in this cell.
-        seg_cv_bounds.clear();
-        auto seg_cv_part = make_partition(
-            seg_cv_bounds,
-            transform_view(make_span(c.num_branches()), [&c](const unsigned s) {
-                if (!c.segment(s)->is_soma() && c.parent(s)->is_soma()) {
-                    return c.segment(s)->num_compartments() + 1;
-                }
-                return c.segment(s)->num_compartments();
-            }),
-            cell_cv_base);
-
-        const auto nseg = seg_cv_part.size();
-        if (nseg==0) {
-            throw arbor_internal_error("fvm_layout: cannot discretrize cell with no segments");
-        }
-
-        // Handle soma (first segment and root of tree) specifically.
-        const auto soma = c.segment(0)->as_soma();
-        if (!soma) {
-            throw arbor_internal_error("fvm_layout: first segment of cell must be soma");
-        }
-        else if (soma->num_compartments()!=1) {
-            throw arbor_internal_error("fvm_layout: soma must have exactly one compartment");
-        }
-
-        segment_info soma_info;
-
-        size_type soma_cv = cell_cv_base;
-        value_type soma_area = math::area_sphere(soma->radius());
-
-        soma_info.proximal_cv = soma_cv;
-        soma_info.distal_cv = soma_cv;
-        soma_info.distal_cv_area = soma_area;
-        D.segments.push_back(soma_info);
-
-        index_type soma_segment_index = D.segments.size()-1;
-        D.parent_segment.push_back(soma_segment_index);
-
-        // Other segments must all be cable segments.
-        for (size_type j = 1; j<nseg; ++j) {
-            const auto& seg_cv_ival = seg_cv_part[j];
-            const auto ncv = seg_cv_ival.second-seg_cv_ival.first;
-
-            segment_info seg_info;
-
-            const auto cable = c.segment(j)->as_cable();
-            if (!cable) {
-                throw arbor_internal_error("fvm_layout: non-root segments of cell must be cable segments");
-            }
-
-            const auto& params = cable->parameters;
-            auto cm = (params.membrane_capacitance | cm_default).value(); // [F/m²]
-            auto rL = (params.axial_resistivity | rL_default).value(); // [Ω·cm]
-            auto init_vm = (params.init_membrane_potential | init_vm_default).value(); // [mV]
-            auto temp = (params.temperature_K | temp_default).value(); // [mV]
-
-            bool soma_parent = c.parent(j)->as_soma() ? true : false; //segment's parent is a soma
-
-            auto radii = cable->radii();
-            auto lengths = cable->lengths();
-
-            // If segment has soma parent, send soma information to div_compartment_integrator
-            if (soma_parent) {
-                radii.insert(radii.begin(), soma->radius());
-                lengths.insert(lengths.begin(), soma->radius()*2);
-            }
-
-            auto divs = div_compartment_integrator(ncv, radii, lengths, soma_parent);
-
-            seg_info.parent_cv = soma_parent ? seg_cv_ival.first : D.parent_cv[seg_cv_ival.first];
-            seg_info.parent_cv_area = soma_parent ? divs(0).right.area + divs(1).left.area : divs(0).left.area;
-            seg_info.soma_parent = soma_parent;
-
-            seg_info.proximal_cv = soma_parent ? seg_cv_ival.first + 1 : seg_cv_ival.first;
-            seg_info.distal_cv = seg_cv_ival.second-1;
-            seg_info.distal_cv_area = divs(ncv-1).right.area;
-
-            D.segments.push_back(seg_info);
-            if (soma_parent) {
-                D.parent_segment.push_back(soma_segment_index);
             }
             else {
-                auto opt_index = util::binary_search_index(D.segments, seg_info.parent_cv,
-                    [](const segment_info& seg_info) { return seg_info.distal_cv; });
-
-                if (!opt_index) {
-                    throw arbor_internal_error("fvm_layout: could not find parent segment");
-                }
-                D.parent_segment.push_back(*opt_index);
-            }
-
-
-            for (auto i: make_span(seg_cv_ival)) {
-                const auto& div = divs(i-seg_cv_ival.first);
-                auto j = D.parent_cv[i];
-
-                auto h1 = div.left.length;       // [µm]
-                auto V1 = div.left.volume;       // [µm³]
-                auto h2 = div.right.length;      // [µm]
-                auto V2 = div.right.volume;      // [µm³]
-                auto h = h1+h2;
-
-                auto linear_conductivity = 1/rL*h*V1*V2/(h2*h2*V1+h1*h1*V2); // [S·cm¯¹·µm²] ≡ [10²·µS·µm]
-                constexpr double unit_scale = 1e2;
-                D.face_conductance[i] =  unit_scale * linear_conductivity / h; // [µS]
-
-                auto al = div.left.area;         // [µm²]
-                auto ar = div.right.area;        // [µm²]
-                auto dr = div.right.radii.second*2;          // [µm]
-
-                D.cv_area[j] += al;              // [µm²]
-                D.cv_capacitance[j] += al*cm;    // [pF]
-                D.init_membrane_potential[j] += al*init_vm;  // [mV·µm²]
-                D.temperature_K[j] += al*temp;   // [K·µm²]
-
-                D.cv_area[i] += ar;              // [µm²]
-                D.cv_capacitance[i] += ar*cm;    // [pF]
-                D.init_membrane_potential[i] += ar*init_vm;  // [mV·µm²]
-                D.temperature_K[i] += ar*temp;   // [K·µm²]
-                D.diam_um[i] = dr;               // [µm]
-            }
-        }
-
-        auto soma_cm = (soma->parameters.membrane_capacitance | cm_default).value(); // [F/m²]
-        auto soma_init_vm = (soma->parameters.init_membrane_potential | init_vm_default).value(); // [mV]
-        auto soma_temp = (soma->parameters.temperature_K | temp_default).value();    // [mV]
-
-        D.cv_area[soma_cv] = soma_area;                  // [µm²]
-        D.cv_capacitance[soma_cv] = soma_area*soma_cm;   // [pF]
-        D.init_membrane_potential[soma_cv] = soma_area*soma_init_vm; // [mV·µm²]
-        D.temperature_K[soma_cv] = soma_area*soma_temp;  // [K·µm²]
-        D.diam_um[soma_cv] = soma->radius()*2;           // [µm]
-    }
-
-    // Rescale CV init_vm and temperature values to get area-weighted means.
-    for (auto i: make_span(0, D.ncv)) {
-        if (D.cv_area[i]) {
-            D.init_membrane_potential[i] /= D.cv_area[i]; // [mV]
-            D.temperature_K[i] /= D.cv_area[i]; // [mV]
-        }
-    }
-
-    // Number of CVs per cell is exactly number of compartments.
-    D.cell_cv_bounds = std::move(cell_cv_bounds);
-    return D;
-}
-
-// Build up mechanisms.
-//
-// Processing procedes in the following stages:
-//
-//   I.  Collect segment mechanism info from the cell descriptions into temporary
-//       data structures for density mechanism, point mechanisms, and ion channels.
-//
-//   II. Build mechanism and ion configuration in `fvm_mechanism_data`:
-//       IIa. Ion channel CVs.
-//       IIb. Density mechanism CVs, parameter values; ion channel default concentration contributions.
-//       IIc. Point mechanism CVs, parameter values, and targets.
-
-fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_discretization& D) {
-    using util::assign;
-    using util::sort_by;
-
-    using value_type = fvm_value_type;
-    using index_type = fvm_index_type;
-    using size_type = fvm_size_type;
-
-    using string_set = std::unordered_set<std::string>;
-    using string_index_map = std::unordered_map<std::string, size_type>;
-
-    const mechanism_catalogue& catalogue = *gprop.catalogue;
-    const cable_cell_parameter_set& gparam = gprop.default_parameters;
-
-    fvm_mechanism_data mechdata;
-
-    // I. Collect segment mechanism info from cells.
-
-    // Temporary table for density mechanism info, mapping mechanism name to tuple of:
-    //     1. Vector of segment indices and mechanism parameter settings where mechanism occurs.
-    //     2. Set of the names of parameters that are anywhere modified.
-    //     3. Pointer to mechanism metadata from catalogue.
-
-    struct density_mech_data {
-        std::vector<std::pair<size_type, const mechanism_desc*>> segments;
-        string_set paramset;
-        std::shared_ptr<mechanism_info> info = nullptr;
-    };
-    std::unordered_map<std::string, density_mech_data> density_mech_table;
-
-    // Temporary table for revpot mechanism info, mapping mechanism name to tuple of:
-    //     1. Sorted map from cell index to mechanism parameter settings.
-    //     2. Set of the names of parameters that are anywhere modified.
-    //     3. Pointer to mechanism metadat from catalogue.
-
-    struct revpot_mech_data {
-        std::map<size_type, const mechanism_desc*> cells;
-        string_set paramset;
-        std::shared_ptr<mechanism_info> info = nullptr;
-    };
-    std::unordered_map<std::string, revpot_mech_data> revpot_mech_table;
-
-    // Temporary table for point mechanism info, mapping mechanism name to tuple:
-    //     1. Vector of point info: CV, index into cell group targets, parameter settings.
-    //     2. Set of the names of parameters that are anywhere modified.
-    //     3. Mechanism parameter settings.
-
-    struct point_mech_data {
-        struct point_data {
-            size_type cv;
-            size_type target_index;
-            const mechanism_desc* desc;
-        };
-        std::vector<point_data> points;
-        string_set paramset;
-        std::shared_ptr<mechanism_info> info = nullptr;
-    };
-    std::unordered_map<std::string, point_mech_data> point_mech_table;
-
-    // Built-in stimulus mechanism data is dealt with especially below.
-    // Record for each stimulus the CV and clamp data.
-
-    std::vector<std::pair<size_type, i_clamp>> stimuli;
-
-    // Temporary table for presence of ion channels, mapping ion name to a _sorted_
-    // collection of per-segment ion data, viz. a map from segment index to
-    // initial internal and external concentrations and reversal potentials, plus
-    // information about whether there is a mechanism that requires this ion
-    // on this segment, and if that ion writes to internal or external concentration.
-
-    struct ion_segment_data {
-        cable_cell_ion_data ion_data;
-        bool mech_requires = false;
-        bool mech_writes_iconc = false;
-        bool mech_writes_econc = false;
-    };
-
-    std::unordered_map<std::string, std::map<index_type, ion_segment_data>> ion_segments;
-
-    // Temporary table for presence of mechanisms that read the reversal potential
-    // of an ion channel, mapping ion name and cell index to a _sorted_
-    // collection of segment indices.
-
-    std::unordered_map<std::string, std::unordered_map<size_type, std::set<size_type>>> ion_revpot_segments;
-
-    auto verify_ion_usage =
-        [&gprop](const std::string& mech_name, const mechanism_info* info)
-    {
-        const auto& global_ions = gprop.ion_species;
-
-        for (const auto& ion: info->ions) {
-            const auto& ion_name = ion.first;
-            const auto& ion_dep = ion.second;
-
-            if (!global_ions.count(ion_name)) {
-                throw cable_cell_error(
-                    "mechanism "+mech_name+" uses ion "+ion_name+ " which is missing in global properties");
-            }
-
-            if (ion_dep.verify_ion_charge) {
-                if (ion_dep.expected_ion_charge!=global_ions.at(ion_name)) {
-                    throw cable_cell_error(
-                        "mechanism "+mech_name+" uses ion "+ion_name+ " expecting a different valence");
-                }
-            }
-        }
-    };
-
-    auto update_paramset_and_validate =
-        [&catalogue,&verify_ion_usage]
-        (const mechanism_desc& desc, std::shared_ptr<mechanism_info>& info, string_set& paramset)
-    {
-        auto& name = desc.name();
-        if (!info) {
-            info.reset(new mechanism_info(catalogue[name]));
-            verify_ion_usage(name, info.get());
-        }
-        for (const auto& pv: desc.values()) {
-            if (!paramset.count(pv.first)) {
-                if (!info->parameters.count(pv.first)) {
-                    throw no_such_parameter(name, pv.first);
-                }
-                if (!info->parameters.at(pv.first).valid(pv.second)) {
-                    throw invalid_parameter_value(name, pv.first, pv.second);
-                }
-                paramset.insert(pv.first);
-            }
-        }
-    };
-
-    auto cell_segment_part = D.cell_segment_part();
-    size_type target_count = 0;
-
-    for (auto cell_idx: make_span(0, D.ncell)) {
-        auto& cell = cells[cell_idx];
-        auto seg_range = cell_segment_part[cell_idx];
-        size_type target_offset = target_count;
-
-        auto add_ion_segment =
-            [&gparam, &cell, &ion_segments]
-            (const std::string& ion_name, size_type segment_idx, const cable_cell_parameter_set& seg_param, const ion_dependency* iondep = nullptr)
-        {
-            const auto& global_ion_data = gparam.ion_data;
-            const auto& cell_ion_data = cell.default_parameters.ion_data;
-            const auto& seg_ion_data = seg_param.ion_data;
-
-            auto& ion_entry = ion_segments[ion_name];
-
-            // New entry?
-            util::optional<cable_cell_ion_data> opt_ion_data;
-            if (!ion_entry.count(segment_idx)) {
-                opt_ion_data = value_by_key(seg_ion_data, ion_name);
-                if (!opt_ion_data) {
-                    opt_ion_data = value_by_key(cell_ion_data, ion_name);
-                }
-                if (!opt_ion_data) {
-                    opt_ion_data = value_by_key(global_ion_data, ion_name);
-                }
-                if (!opt_ion_data) {
-                    throw arbor_internal_error("missing entry for ion "+ion_name+" in cable_cell global defaults");
-                }
-            }
-
-            auto& ion_entry_seg = ion_entry[segment_idx];
-            if (opt_ion_data) {
-                ion_entry_seg.ion_data = *opt_ion_data;
-            }
-            if (iondep) {
-                ion_entry_seg.mech_requires = true;
-                ion_entry_seg.mech_writes_iconc |= iondep->write_concentration_int;
-                ion_entry_seg.mech_writes_econc |= iondep->write_concentration_ext;
-            }
-        };
-
-        for (auto segment_idx: make_span(seg_range)) {
-            const segment_ptr& seg = cell.segments()[segment_idx-seg_range.first];
-
-            for (const mechanism_desc& desc: seg->mechanisms()) {
-                const auto& name = desc.name();
-
-                density_mech_data& entry = density_mech_table[name];
-                update_paramset_and_validate(desc, entry.info, entry.paramset);
-                entry.segments.emplace_back(segment_idx, &desc);
-
-                for (const auto& ion_entry: entry.info->ions) {
-                    const std::string& ion_name = ion_entry.first;
-                    const ion_dependency& iondep = ion_entry.second;
-
-                    add_ion_segment(ion_name, segment_idx, seg->parameters, &iondep);
-
-                    if (ion_entry.second.read_reversal_potential) {
-                        ion_revpot_segments[ion_name][cell_idx].insert(segment_idx);
+                for (auto& iondep: info.ions) {
+                    if (iondep.second.write_reversal_potential) {
+                        revpot_tbl[iondep.first] = revpot;
                     }
                 }
-            }
-        }
 
-        for (const auto& cellsyn_by_name: cell.synapses()) {
-            const auto& name = cellsyn_by_name.first;
-            point_mech_data& entry = point_mech_table[name];
+                fvm_mechanism_config config;
+                config.kind = mechanismKind::revpot;
+                config.cv = ion_cvs.second;
+                config.norm_area.assign(n_cv, 1.);
 
-            for (const auto& placed_synapse: cellsyn_by_name.second) {
-                mlocation loc = placed_synapse.loc;
-                cell_lid_type target = target_offset + placed_synapse.lid;
-                ++target_count;
-                const mechanism_desc& desc = placed_synapse.item;
-
-                update_paramset_and_validate(desc, entry.info, entry.paramset);
-
-                size_type cv = D.branch_location_cv(cell_idx, loc);
-                entry.points.push_back({cv, target, &desc});
-
-                const segment_ptr& seg = cell.segments()[loc.branch];
-                size_type segment_idx = D.cell_segment_bounds[cell_idx]+loc.branch;
-
-                for (const auto& ion_entry: entry.info->ions) {
-                    const std::string& ion_name = ion_entry.first;
-                    const ion_dependency& iondep = ion_entry.second;
-
-                    add_ion_segment(ion_name, segment_idx, seg->parameters, &iondep);
-
-                    if (ion_entry.second.read_reversal_potential) {
-                        ion_revpot_segments[ion_name][cell_idx].insert(segment_idx);
-                    }
+                for (auto& kv: revpot.values()) {
+                    config.param_values.emplace_back(kv.first, std::vector<value_type>(n_cv, kv.second));
                 }
-            }
-        }
 
-        for (const auto& loc_clamp: cell.stimuli()) {
-            size_type cv = D.branch_location_cv(cell_idx, loc_clamp.loc);
-            stimuli.push_back({cv, loc_clamp.item});
-        }
-
-        // Add segments to ion_segments map which intersect with existing segments, so
-        // that each CV with an ion value is 100% covered.
-
-        for (auto& e: ion_segments) {
-            const auto& name = e.first;
-            const auto& ion_entry = e.second;
-
-            for (auto segment_idx: make_span(seg_range)) {
-                index_type parent_segment_idx = D.parent_segment[segment_idx];
-                const segment_ptr& parent_seg = cell.segments()[parent_segment_idx-seg_range.first];
-
-                if (ion_entry.count(segment_idx)) {
-                    add_ion_segment(name, parent_segment_idx, parent_seg->parameters);
-                }
-            }
-
-            for (auto segment_idx: make_span(seg_range)) {
-                const segment_ptr& seg = cell.segments()[segment_idx-seg_range.first];
-                index_type parent_segment_idx = D.parent_segment[segment_idx];
-
-                if (ion_entry.count(parent_segment_idx)) {
-                    add_ion_segment(name, segment_idx, seg->parameters);
-                }
-            }
-        }
-
-
-        // Maintain a map of reversal potential mechanism to written ions for this
-        // cell, to ensure consistency with assignments from the cell and global
-        // parameters.
-
-        std::unordered_multimap<std::string, std::string> revpot_to_ion;
-        std::unordered_map<std::string, std::string> ion_to_revpot;
-
-        auto add_revpot = [&](const std::string& ion, const mechanism_desc& desc) {
-            const auto& name = desc.name();
-
-            revpot_mech_data& entry = revpot_mech_table[name];
-            update_paramset_and_validate(desc, entry.info, entry.paramset);
-            ion_to_revpot[ion] = desc.name();
-            for (auto dep: entry.info->ions) {
-                if (dep.second.write_reversal_potential) {
-                    revpot_to_ion.insert({desc.name(), dep.first});
-                }
-            }
-            entry.cells.insert({cell_idx, &desc});
-        };
-
-        const auto& cellrevpot = cell.default_parameters.reversal_potential_method;
-        for (const auto& revpot: cellrevpot) {
-            add_revpot(revpot.first, revpot.second);
-        }
-
-        const auto& globalrevpot =  gparam.reversal_potential_method;
-        for (const auto& revpot: globalrevpot) {
-            if (!cellrevpot.count(revpot.first)) {
-                add_revpot(revpot.first, revpot.second);
-            }
-        }
-
-        // Ensure that if a revpot mechanism writes to multiple ions, that
-        // that mechanism is associated with all of them.
-        for (auto& entry: revpot_to_ion) {
-            auto declared_revpot = value_by_key(ion_to_revpot, entry.second);
-            if (!declared_revpot || declared_revpot.value()!=entry.first) {
-                throw cable_cell_error("mechanism "+entry.first+" writes reversal potential for "
-                    +entry.second+", which is not configured to use "+entry.first);
+                M.mechanisms[revpot.name()] = std::move(config);
             }
         }
     }
 
-
-    // II. Build ion and mechanism configs.
-
-    // Shared temporary lookup info across mechanism instances, set by build_param_data.
-    string_index_map param_index;           // maps parameter name to parameter index
-    std::vector<std::string> param_name;    // indexed by parameter index
-    std::vector<value_type> param_default;  // indexed by parameter index
-
-    auto build_param_data =
-        [&param_name, &param_index, &param_default](const string_set& paramset, const mechanism_info* info)
-    {
-        assign(param_name, paramset);
-        auto nparam = paramset.size();
-
-        assign(param_default, transform_view(param_name,
-            [info](const std::string& p) { return info->parameters.at(p).default_value; }));
-
-        param_index.clear();
-        for (auto i: make_span(0, nparam)) {
-            param_index[param_name[i]] = i;
-        }
-        return nparam;
-    };
-
-    // IIa. Ion channel CVs.
-
-    for (const auto& ionseg: ion_segments) {
-        auto& seg_ion_map = ion_segments[ionseg.first];
-        fvm_ion_config& ion_config = mechdata.ions[ionseg.first];
-        auto& seg_ion_data = ionseg.second;
-
-        for_each_cv_in_segments(D, keys(seg_ion_data),
-            [&ion_config, &seg_ion_map](size_type cv_index, index_type cv, value_type area, index_type seg_index, index_type seg) {
-                if (seg_ion_map[seg].mech_requires) {
-                    if (!util::binary_search_index(ion_config.cv, cv)) {
-                        ion_config.cv.push_back(cv);
-                    }
-                }
-            });
-
-        ion_config.init_iconc.resize(ion_config.cv.size());
-        ion_config.init_econc.resize(ion_config.cv.size());
-        ion_config.reset_iconc.resize(ion_config.cv.size());
-        ion_config.reset_econc.resize(ion_config.cv.size());
-        ion_config.init_revpot.resize(ion_config.cv.size());
-
-        for_each_cv_in_segments(D, keys(seg_ion_data),
-            [&ion_config, &seg_ion_map, &D](size_type cv_index, index_type cv, value_type area, index_type seg_index, index_type seg) {
-                auto opt_i = util::binary_search_index(ion_config.cv, cv);
-                if (!opt_i) return;
-
-                std::size_t i = *opt_i;
-                auto& seg_ion_entry = seg_ion_map[seg];
-
-                value_type weight = area/D.cv_area[cv];
-                ion_config.reset_iconc[i] += weight*seg_ion_entry.ion_data.init_int_concentration;
-                ion_config.reset_econc[i] += weight*seg_ion_entry.ion_data.init_ext_concentration;
-
-                if (!seg_ion_entry.mech_writes_iconc) {
-                    ion_config.init_iconc[i] += weight*seg_ion_entry.ion_data.init_int_concentration;
-                }
-
-                if (!seg_ion_entry.mech_writes_econc) {
-                    ion_config.init_econc[i] += weight*seg_ion_entry.ion_data.init_ext_concentration;
-                }
-
-                // Reversal potentials are not area weighted, and are overridden at the
-                // per-cell level by any supplied revpot mechanisms.
-                ion_config.init_revpot[i] = seg_ion_entry.ion_data.init_reversal_potential;
-            });
-    }
-
-    // IIb. Reversal potential mechanism CVs and parameters.
-
-    for (const auto& entry: revpot_mech_table) {
-        const std::string& name = entry.first;
-        const mechanism_info& info = *entry.second.info;
-
-        fvm_mechanism_config& config = mechdata.mechanisms[name];
-        config.kind = mechanismKind::revpot;
-
-        auto nparam = build_param_data(entry.second.paramset, &info);
-        config.param_values.resize(nparam);
-        for (auto pidx: make_span(nparam)) {
-            config.param_values[pidx].first = param_name[pidx];
-        }
-
-        for (auto& cell_entry: entry.second.cells) {
-            auto cell_idx = cell_entry.first;
-            std::vector<index_type> segment_indices;
-
-            for (auto& mech_ion_dep_entry: info.ions) {
-                auto& ion_name = mech_ion_dep_entry.first;
-                auto& ion_dep = mech_ion_dep_entry.second;
-
-                if (!ion_dep.write_reversal_potential) continue;
-
-                const auto& segments = value_by_key(ion_revpot_segments[ion_name], cell_idx);
-                if (!segments) continue;
-
-                for (auto seg_idx: segments.value()) {
-                    segment_indices.push_back(seg_idx);
-                }
-            }
-
-            const mechanism_desc& desc = *cell_entry.second;
-            std::vector<value_type> pval = param_default;
-
-            for (auto pidx: make_span(nparam)) {
-                if (auto opt_v = value_by_key(desc.values(), param_name[pidx])) {
-                    pval[pidx] = opt_v.value();
-                }
-            }
-
-            size_type config_offset = config.cv.size();
-            for_each_cv_in_segments(D, segment_indices,
-                [&](size_type cv_index, index_type cv, auto, auto, auto) {
-                    extend_at(config.cv, config_offset+cv_index) = cv;
-
-                    for (auto pidx: make_span(nparam)) {
-                        extend_at(config.param_values[pidx].second, config_offset+cv_index) = pval[pidx];
-                    }
-                });
-        }
-    }
-
-    // Remove any reversal potential mechanisms that ultimately have no extent.
-    for (auto i = mechdata.mechanisms.begin(); i!=mechdata.mechanisms.end(); ) {
-        i = i->second.cv.empty()? mechdata.mechanisms.erase(i): std::next(i);
-    }
-
-    // IIc. Density mechanism CVs, parameters and ionic default concentration contributions.
-
-    // Ameliorate area sum rounding errors by clamping normalized area contributions to [0, 1]
-    // and rounding values within an epsilon of 0 or 1 to that value.
-    auto trim = [](value_type& v) {
-        constexpr value_type eps = std::numeric_limits<value_type>::epsilon()*4;
-        v = v<eps? 0: v+eps>1? 1: v;
-    };
-
-    for (const auto& entry: density_mech_table) {
-        const std::string& name = entry.first;
-        fvm_mechanism_config& config = mechdata.mechanisms[name];
-        config.kind = mechanismKind::density;
-
-        auto nparam = build_param_data(entry.second.paramset, entry.second.info.get());
-
-        // In order to properly account for partially overriden parameters in CVs
-        // that are shared between segments, we need to track not only the area-weighted
-        // sum of parameter values, but also the total area for each CV for each parameter
-        // that has been overriden — the remaining area demands a contribution from the
-        // parameter default value.
-
-        std::vector<std::vector<value_type>> param_value(nparam);
-        std::vector<std::vector<value_type>> param_area_contrib(nparam);
-
-        for_each_cv_in_segments(D, keys(entry.second.segments),
-            [&](size_type cv_index, index_type cv, value_type area, index_type seg_index, index_type seg)
-            {
-                const mechanism_desc& mech_desc = *entry.second.segments[seg_index].second;
-
-                extend_at(config.cv, cv_index) = cv;
-
-                for (auto& kv: mech_desc.values()) {
-                    int pidx = param_index.at(kv.first);
-                    value_type v = kv.second;
-
-                    extend_at(param_area_contrib[pidx], cv_index) += area;
-                    extend_at(param_value[pidx], cv_index) += area*v;
-                }
-
-                extend_at(config.norm_area, cv_index) += area;
-            });
-
-        // Complete parameter values with default values.
-
-        config.param_values.resize(nparam);
-        for (auto pidx: make_span(0, nparam)) {
-            value_type default_value = param_default[pidx];
-            config.param_values[pidx].first = param_name[pidx];
-
-            auto& values = config.param_values[pidx].second;
-            values.resize(config.cv.size());
-
-            for (auto i: count_along(config.cv)) {
-                value_type v = param_value[pidx][i];
-                value_type cv_area = D.cv_area[config.cv[i]];
-                value_type remaining_area = cv_area-param_area_contrib[pidx][i];
-
-                values[i] = (v+remaining_area*default_value)/cv_area;
-            }
-        }
-
-        // Normalize norm_area entries.
-
-        for (auto i: count_along(config.cv)) {
-            config.norm_area[i] /= D.cv_area[config.cv[i]];
-            trim(config.norm_area[i]);
-        }
-    }
-
-    // II.3 Point mechanism CVs, targets, parameters and stimuli.
-
-    for (const auto& entry: point_mech_table) {
-        const std::string& name = entry.first;
-        const auto& points = entry.second.points;
-
-        auto nparam = build_param_data(entry.second.paramset, entry.second.info.get());
-        std::vector<std::vector<value_type>> param_value(nparam);
-
-        // Permute points in this mechanism so that they are in increasing CV order;
-        // cv_order[i] is the index of the ith point by increasing CV.
-
-        mechdata.ntarget += points.size();
-
-        std::vector<size_type> cv_order;
-        assign(cv_order, count_along(points));
-        sort_by(cv_order, [&](size_type i) { return points[i].cv; });
-
-        fvm_mechanism_config& config = mechdata.mechanisms[name];
-        config.kind = mechanismKind::point;
-
-        // Generate config.cv: contains cv of group of synapses that can be coalesced into one instance
-        // Generate config.param_values: contains parameters of group of synapses that can be coalesced into one instance
-        // Generate multiplicity: contains number of synapses in each coalesced group of synapses
-        // Generate target: contains the synapse target number
-        if (catalogue[name].linear && gprop.coalesce_synapses) {
-            // cv_param_vec used to lexicographically sort the cv, parameters and target, which are stored in that order
-            std::vector<cv_param> cv_param_vec(cv_order.size());
-
-            for (unsigned i = 0; i < cv_order.size(); ++i) {
-                auto loc = cv_order[i];
-                std::vector<value_type> p(nparam);
-                for (auto pidx: make_span(0, nparam)) {
-                    value_type pdefault = param_default[pidx];
-                    const std::string& pname = param_name[pidx];
-                    p[pidx] = value_by_key(points[loc].desc->values(), pname).value_or(pdefault);
-                }
-                cv_param_vec[i] = cv_param{points[loc].cv, p, points[loc].target_index};
-            }
-
-            std::sort(cv_param_vec.begin(), cv_param_vec.end());
-
-            auto identical_synapse = [](const cv_param& i, const cv_param& j) {
-                return i.cv==j.cv && i.params==j.params;
-            };
-
-            config.param_values.resize(nparam);
-            for (auto pidx: make_span(0, nparam)) {
-                config.param_values[pidx].first = param_name[pidx];
-            }
-            config.target.reserve(cv_param_vec.size());
-
-            for (auto i = cv_param_vec.begin(), j = i; i!=cv_param_vec.end(); i = j) {
-                ++j;
-                while (j!=cv_param_vec.end() && identical_synapse(*i, *j)) ++j;
-
-                auto mergeable = util::make_range(i, j);
-
-                config.cv.push_back((*i).cv);
-                for (auto pidx: make_span(0, nparam)) {
-                    config.param_values[pidx].second.push_back((*i).params[pidx]);
-                }
-                config.multiplicity.push_back(mergeable.size());
-
-                for (auto e: mergeable) {
-                    config.target.push_back(e.target);
-                }
-            }
-        }
-        else {
-            assign(config.cv, transform_view(cv_order, [&](size_type j) { return points[j].cv; }));
-            assign(config.target, transform_view(cv_order, [&](size_type j) { return points[j].target_index; }));
-
-            config.param_values.resize(nparam);
-            for (auto pidx: make_span(0, nparam)) {
-                value_type pdefault = param_default[pidx];
-                const std::string& pname = param_name[pidx];
-
-                config.param_values[pidx].first = pname;
-
-                auto& values = config.param_values[pidx].second;
-                assign(values, transform_view(cv_order,
-                                              [&](size_type j) { return value_by_key(points[j].desc->values(), pname).value_or(pdefault); }));
-            }
-        }
-    }
-
-    // Sort stimuli by ascending CV and construct parameter vectors.
-    if (!stimuli.empty()) {
-        fvm_mechanism_config& stim_config = mechdata.mechanisms["_builtin_stimulus"];
-        using cv_clamp = const std::pair<size_type, i_clamp>&;
-
-        auto stim_cv_field = [](cv_clamp p) { return p.first; };
-        sort_by(stimuli, stim_cv_field);
-        assign(stim_config.cv, transform_view(stimuli, stim_cv_field));
-
-        stim_config.param_values.resize(3);
-
-        stim_config.param_values[0].first = "delay";
-        assign(stim_config.param_values[0].second,
-                transform_view(stimuli, [](cv_clamp p) { return p.second.delay; }));
-
-        stim_config.param_values[1].first = "duration";
-        assign(stim_config.param_values[1].second,
-            transform_view(stimuli, [](cv_clamp p) { return p.second.duration; }));
-
-        stim_config.param_values[2].first = "amplitude";
-        assign(stim_config.param_values[2].second,
-            transform_view(stimuli, [](cv_clamp p) { return p.second.amplitude; }));
-    }
-
-    return mechdata;
+    return M;
 }
 
 } // namespace arb
