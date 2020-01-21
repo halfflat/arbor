@@ -9,7 +9,6 @@
 #include <arbor/load_balance.hpp>
 #include <arbor/math.hpp>
 #include <arbor/cable_cell.hpp>
-#include <arbor/segment.hpp>
 #include <arbor/recipe.hpp>
 #include <arbor/sampling.hpp>
 #include <arbor/simulation.hpp>
@@ -250,8 +249,8 @@ TEST(fvm_lowered, target_handles) {
         make_cell_ball_and_3stick()
     };
 
-    EXPECT_EQ(cells[0].num_branches(), 2u);
-    EXPECT_EQ(cells[1].num_branches(), 4u);
+    EXPECT_EQ(cells[0].morphology().num_branches(), 2u);
+    EXPECT_EQ(cells[1].morphology().num_branches(), 4u);
 
     // (in increasing target order)
     cells[0].place(mlocation{1, 0.4}, "expsyn");

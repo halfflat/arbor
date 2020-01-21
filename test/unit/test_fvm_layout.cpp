@@ -1,10 +1,10 @@
 #include <string>
 #include <vector>
 
-#include <arbor/util/optional.hpp>
-#include <arbor/mechcat.hpp>
-#include <arbor/math.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/math.hpp>
+#include <arbor/mechcat.hpp>
+#include <arbor/util/optional.hpp>
 
 #include "fvm_layout.hpp"
 #include "util/maputil.hpp"
@@ -24,23 +24,6 @@ using util::count_along;
 using util::value_by_key;
 
 namespace {
-    double area(const segment* s) {
-        if (auto soma = s->as_soma()) {
-            return math::area_sphere(soma->radius());
-        }
-        else if (auto cable = s->as_cable()) {
-            unsigned nc = cable->num_sub_segments();
-            double a = 0;
-            for (unsigned i = 0; i<nc; ++i) {
-                a += math::area_frustrum(cable->lengths()[i], cable->radii()[i], cable->radii()[i+1]);
-            }
-            return a;
-        }
-        else {
-            return 0;
-        }
-    }
-
     std::vector<cable_cell> two_cell_system() {
         std::vector<cable_cell> cells;
 
@@ -100,8 +83,8 @@ namespace {
 
     void check_two_cell_system(std::vector<cable_cell>& cells) {
         ASSERT_EQ(2u, cells.size());
-        ASSERT_EQ(2u, cells[0].num_branches());
-        ASSERT_EQ(4u, cells[1].num_branches());
+        ASSERT_EQ(2u, cells[0].morphology().num_branches());
+        ASSERT_EQ(4u, cells[1].morphology().num_branches());
     }
 } // namespace
 
@@ -126,16 +109,12 @@ TEST(fvm_layout, mech_index) {
     auto& exp2syn_config = M.mechanisms.at("exp2syn");
 
     using ivec = std::vector<fvm_index_type>;
-    using fvec = std::vector<fvm_value_type>;
 
     // HH on somas of two cells, with CVs 0 and 5.
     // Proportional area contrib: soma area/CV area.
 
     EXPECT_EQ(mechanismKind::density, hh_config.kind);
     EXPECT_EQ(ivec({0,6}), hh_config.cv);
-
-    fvec norm_area({area(cells[0].soma())/D.cv_area[0], area(cells[1].soma())/D.cv_area[6]});
-    EXPECT_TRUE(testing::seq_almost_eq<double>(norm_area, hh_config.norm_area));
 
     // Three expsyn synapses, two 0.4 along segment 1, and one 0.4 along segment 5.
     // These two synapses can be coalesced into 1 synapse

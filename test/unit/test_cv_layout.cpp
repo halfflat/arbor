@@ -1,10 +1,11 @@
 #include <algorithm>
 #include <utility>
 
-#include <arbor/util/optional.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/math.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/locset.hpp>
+#include <arbor/util/optional.hpp>
 
 #include "fvm_layout.hpp"
 #include "util/span.hpp"
@@ -70,7 +71,7 @@ TEST(cv_layout, trivial) {
         EXPECT_DOUBLE_EQ(params.init_membrane_potential.value(), D.init_membrane_potential[cv]);
 
         double total_area = 0;
-        unsigned n_branch = cells[i].num_branches();
+        unsigned n_branch = cells[i].morphology().num_branches();
         const auto& embedding = cells[i].embedding();
         for (unsigned b = 0; b<n_branch; ++b) {
             total_area += embedding.integrate_area(mcable{b, 0., 1.});
@@ -88,7 +89,6 @@ TEST(cv_layout, cable) {
     params.init_membrane_potential = 0;
 
     cable_cell c(morph);
-    c.allow_partial_paint();
     c.paint(reg::cable({0, 0.0, 0.2}), init_membrane_potential{10});
     c.paint(reg::cable({0, 0.2, 0.7}), init_membrane_potential{20});
     c.paint(reg::cable({0, 0.7, 1.0}), init_membrane_potential{30});

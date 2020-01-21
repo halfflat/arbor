@@ -80,7 +80,6 @@ set(unit_sources
     test_algorithms.cpp
     test_any.cpp
     test_backend.cpp
-    test_cable_cell.cpp
     test_counter.cpp
     test_cv_geom.cpp
     test_cv_layout.cpp
@@ -128,7 +127,6 @@ set(unit_sources
     test_probe.cpp
     test_range.cpp
     test_ratelem.cpp
-    test_segment.cpp
     test_schedule.cpp
     test_spike_source.cpp
     test_scope_exit.cpp

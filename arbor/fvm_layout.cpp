@@ -5,15 +5,13 @@
 
 #include <arbor/arbexcept.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/math.hpp>
 #include <arbor/morph/mcable_map.hpp>
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/util/optional.hpp>
 
-#include "algorithms.hpp"
-#include "fvm_compartment.hpp"
 #include "fvm_layout.hpp"
-#include "tree.hpp"
 #include "util/maputil.hpp"
 #include "util/meta.hpp"
 #include "util/partition.hpp"

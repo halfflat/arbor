@@ -58,7 +58,7 @@ struct single_recipe: public arb::recipe {
         using arb::reg::tagged;
         dict.set("soma", tagged(1));
         dict.set("dend", join(tagged(3), tagged(4), tagged(42)));
-        arb::cable_cell c(morpho, dict, false);
+        arb::cable_cell c(morpho, dict);
 
         // Add HH mechanism to soma, passive channels to dendrites.
         c.paint("soma", "hh");
@@ -77,7 +77,7 @@ struct single_recipe: public arb::recipe {
 
         // Add synapse to last branch.
 
-        arb::cell_lid_type last_branch = c.num_branches()-1;
+        arb::cell_lid_type last_branch = c.morphology().num_branches()-1;
         arb::mlocation end_last_branch = { last_branch, 1. };
         c.place(end_last_branch, "exp2syn");
 

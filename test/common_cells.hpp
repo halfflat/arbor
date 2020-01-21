@@ -1,7 +1,6 @@
 #include <cmath>
 
 #include <arbor/cable_cell.hpp>
-#include <arbor/segment.hpp>
 #include <arbor/mechinfo.hpp>
 #include <arbor/morph/label_dict.hpp>
 #include <arbor/recipe.hpp>
@@ -48,7 +47,6 @@ public:
 
         p = tree.append(p, {{0,0,z,r1}, tag});
         if (ncomp>1) {
-            // TODO: remove last parameter when segments disappear.
             double dz = len/ncomp;
             double dr = (r2-r1)/ncomp;
             for (auto i=1; i<ncomp; ++i) {
@@ -85,7 +83,7 @@ public:
         }
 
         // Make cable_cell from sample tree and dictionary.
-        cable_cell c(tree, dict, true); // TODO: remove last parameter when segments disappear.
+        cable_cell c(tree, dict);
         c.default_parameters.discretization = cv_policy_explicit(cv_boundaries);
         return c;
     }
@@ -152,7 +150,7 @@ inline cable_cell make_cell_ball_and_stick(bool with_stim = true) {
 }
 
 /*
- * Create cell with a soma and three-segment dendrite with single branch point:
+ * Create cell with a soma and three-branch dendrite with single branch point:
  *
  * O----======
  *
