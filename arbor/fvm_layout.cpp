@@ -468,6 +468,7 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
 
         append(L.cv, R.cv);
         append(L.init_iconc, R.init_iconc);
+        append(L.init_econc, R.init_econc);
         append(L.reset_iconc, R.reset_iconc);
         append(L.reset_econc, R.reset_econc);
         append(L.init_revpot, R.init_revpot);
@@ -780,7 +781,6 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
     // Ions:
 
-    std::unordered_map<std::string, mechanism_desc> revpot_tbl;
     auto initial_ion_data_map = cell.region_assignments().get<initial_ion_data>();
 
     for (const auto& ion_cvs: ion_support) {
@@ -832,42 +832,77 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             config.reset_econc[i] *= oo_cv_area;
             config.init_revpot[i] *= oo_cv_area;
             config.init_iconc[i] *= oo_cv_area;
-            config.init_iconc[i] *= oo_cv_area;
+            config.init_econc[i] *= oo_cv_area;
         }
 
         M.ions[ion] = std::move(config);
+    }
 
+    std::unordered_map<std::string, mechanism_desc> revpot_tbl;
+    std::unordered_set<std::string> revpot_specified;
+
+    for (const auto& ion: util::keys(gprop.ion_species)) {
         if (auto maybe_revpot = value_by_key(dflt.reversal_potential_method, ion)
                               | value_by_key(global_dflt.reversal_potential_method, ion))
         {
             const mechanism_desc& revpot = *maybe_revpot;
             mechanism_info info = catalogue[revpot.name()];
             verify_mechanism(info, revpot);
+            revpot_specified.insert(ion);
 
-            if (revpot_tbl.count(ion)) {
-                auto& existing_revpot_desc = revpot_tbl.at(ion);
-                if (existing_revpot_desc.name() != revpot.name() || existing_revpot_desc.values() != revpot.values()) {
-                    throw cable_cell_error("inconsistent revpot ion assignment for mechanism "+revpot.name());
-                }
-            }
-            else {
-                for (auto& iondep: info.ions) {
-                    if (iondep.second.write_reversal_potential) {
+            bool writes_this_revpot = false;
+            for (auto& iondep: info.ions) {
+                if (iondep.second.write_reversal_potential) {
+                    if (revpot_tbl.count(iondep.first)) {
+                        auto& existing_revpot_desc = revpot_tbl.at(iondep.first);
+                        if (existing_revpot_desc.name() != revpot.name() || existing_revpot_desc.values() != revpot.values()) {
+                            throw cable_cell_error("inconsistent revpot ion assignment for mechanism "+revpot.name());
+                        }
+                    }
+                    else {
                         revpot_tbl[iondep.first] = revpot;
                     }
+
+                    writes_this_revpot |= iondep.first==ion;
                 }
-
-                fvm_mechanism_config config;
-                config.kind = mechanismKind::revpot;
-                config.cv = ion_cvs.second;
-                config.norm_area.assign(n_cv, 1.);
-
-                for (auto& kv: revpot.values()) {
-                    config.param_values.emplace_back(kv.first, std::vector<value_type>(n_cv, kv.second));
-                }
-
-                M.mechanisms[revpot.name()] = std::move(config);
             }
+
+            if (!writes_this_revpot) {
+                throw cable_cell_error("revpot mechanism for ion "+ion+" does not write this reversal potential");
+            }
+
+            // Only instantiate if the ion is used.
+            if (M.ions.count(ion)) {
+                // Revpot mechanism already configured? Add cvs for this ion too.
+                if (M.mechanisms.count(revpot.name())) {
+                    fvm_mechanism_config& config = M.mechanisms[revpot.name()];
+                    config.cv = unique_union(config.cv, M.ions[ion].cv);
+                    config.norm_area.assign(config.cv.size(), 1.);
+
+                    for (auto& pv: config.param_values) {
+                        pv.second.assign(config.cv.size(), pv.second.front());
+                    }
+                }
+                else {
+                    fvm_mechanism_config config;
+                    config.kind = mechanismKind::revpot;
+                    config.cv = M.ions[ion].cv;
+                    config.norm_area.assign(config.cv.size(), 1.);
+
+                    for (auto& kv: revpot.values()) {
+                        config.param_values.emplace_back(kv.first, std::vector<value_type>(config.cv.size(), kv.second));
+                    }
+
+                    M.mechanisms[revpot.name()] = std::move(config);
+                }
+            }
+        }
+    }
+
+    // Confirm that all ions written to by a revpot have a corresponding entry in a reversal_potential_method table.
+    for (auto& kv: revpot_tbl) {
+        if (!revpot_specified.count(kv.first)) {
+            throw cable_cell_error("revpot mechanism "+kv.second.name()+" also writes to ion "+kv.first);
         }
     }
 
