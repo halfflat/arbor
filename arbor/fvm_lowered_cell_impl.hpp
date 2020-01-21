@@ -442,7 +442,7 @@ void fvm_lowered_cell_impl<B>::initialize(
         }
     }
 
-    target_handles.resize(mech_data.ntarget);
+    target_handles.resize(mech_data.n_target);
 
     unsigned mech_id = 0;
     for (auto& m: mech_data.mechanisms) {

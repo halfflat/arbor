@@ -286,7 +286,7 @@ namespace impl {
     auto tail(Seq& seq) { return util::make_range(next(begin(seq)), end(seq)); };
 
     template <typename Container, typename Offset, typename Seq>
-    void append_offset(Container& ctr, const Offset& offset, const Seq& rhs) {
+    void append_offset(Container& ctr, Offset offset, const Seq& rhs) {
         for (const auto& x: rhs) {
             ctr.push_back(offset + x);
         }
@@ -460,7 +460,7 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
     using util::append;
     using impl::append_offset;
 
-    fvm_size_type target_offset = left.ntarget;
+    fvm_size_type target_offset = left.n_target;
 
     for (const auto& kv: right.ions) {
         fvm_ion_config& L = left.ions[kv.first];
@@ -474,25 +474,33 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
     }
 
     for (const auto& kv: right.mechanisms) {
-        fvm_mechanism_config& L = left.mechanisms[kv.first];
-        const fvm_mechanism_config& R = kv.second;
+        if (!left.mechanisms.count(kv.first)) {
+            fvm_mechanism_config& L = left.mechanisms[kv.first];
 
-        L.kind = R.kind;
-        append(L.cv, R.cv);
-        append(L.multiplicity, R.multiplicity);
-        append(L.norm_area, R.norm_area);
-        append_offset(L.target, target_offset, R.target);
+            L = kv.second;
+            for (auto& t: L.target) t += target_offset;
+        }
+        else {
+            fvm_mechanism_config& L = left.mechanisms[kv.first];
+            const fvm_mechanism_config& R = kv.second;
 
-        arb_assert(util::is_sorted_by(L.param_values, util::first));
-        arb_assert(util::is_sorted_by(R.param_values, util::first));
-        arb_assert(L.param_values.size()==R.param_values.size());
+            L.kind = R.kind;
+            append(L.cv, R.cv);
+            append(L.multiplicity, R.multiplicity);
+            append(L.norm_area, R.norm_area);
+            append_offset(L.target, target_offset, R.target);
 
-        for (auto j: util::count_along(R.param_values)) {
-            arb_assert(L.param_values[j].first==R.param_values[j].first);
-            append(L.param_values[j].second, R.param_values[j].second);
+            arb_assert(util::is_sorted_by(L.param_values, util::first));
+            arb_assert(util::is_sorted_by(R.param_values, util::first));
+            arb_assert(L.param_values.size()==R.param_values.size());
+
+            for (auto j: util::count_along(R.param_values)) {
+                arb_assert(L.param_values[j].first==R.param_values[j].first);
+                append(L.param_values[j].second, R.param_values[j].second);
+            }
         }
     }
-    left.ntarget += right.ntarget;
+    left.n_target += right.n_target;
 
     return left;
 }
@@ -533,10 +541,10 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         const auto& global_ions = gprop.ion_species;
 
         for (const auto& pv: desc.values()) {
-            if (info.parameters.count(pv.first)) {
+            if (!info.parameters.count(pv.first)) {
                 throw no_such_parameter(desc.name(), pv.first);
             }
-            if (info.parameters.at(pv.first).valid(pv.second)) {
+            if (!info.parameters.at(pv.first).valid(pv.second)) {
                 throw invalid_parameter_value(desc.name(), pv.first, pv.second);
             }
         }
@@ -613,7 +621,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
         std::vector<double> param_on_cv(config.param_values.size());
 
-        for (auto cv: util::make_span(D.geometry.size())) {
+        for (auto cv: D.geometry.cell_cvs(cell_idx)) {
             double area = 0;
             util::fill(param_on_cv, 0.);
 
@@ -722,7 +730,9 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             }
             else {
                 config.cv.push_back(in.cv);
-                config.multiplicity.push_back(1);
+                if (coalesce) {
+                    config.multiplicity.push_back(1);
+                }
 
                 unsigned j = 0;
                 for (auto& pentry: in.param_value) {
@@ -735,14 +745,10 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             prev = &in;
         }
 
-        // If no combined synapses, we can throw away multiplicity.
-        if (config.target.size()==config.multiplicity.size()) {
-            config.multiplicity.clear();
-        }
-
         // If synapse uses an ion, add to ion support.
         update_ion_support(info, config.cv);
 
+        M.n_target += config.target.size();
         M.mechanisms[name] = std::move(config);
     }
 
@@ -801,7 +807,8 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             return zip(a, b, [](double left, double right, pw_element<double> a, pw_element<double> b) { return a.second*b.second; });
         };
 
-        for (auto cv: config.cv) {
+        for (auto i: util::count_along(config.cv)) {
+            auto cv = config.cv[i];
             if (D.cv_area[cv]==0) continue;
 
             for (mcable c: D.geometry.cables(cv)) {
@@ -809,23 +816,23 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
                 auto econc = pw_over_cable(ion_on_cable, c, dflt_econc, [](auto x) { return x.initial.init_ext_concentration; });
                 auto rvpot = pw_over_cable(ion_on_cable, c, dflt_rvpot, [](auto x) { return x.initial.init_reversal_potential; });
 
-                config.reset_iconc[cv] += embedding.integrate_area(c.branch, iconc);
-                config.reset_econc[cv] += embedding.integrate_area(c.branch, econc);
-                config.init_revpot[cv] += embedding.integrate_area(c.branch, rvpot);
+                config.reset_iconc[i] += embedding.integrate_area(c.branch, iconc);
+                config.reset_econc[i] += embedding.integrate_area(c.branch, econc);
+                config.init_revpot[i] += embedding.integrate_area(c.branch, rvpot);
 
                 auto iconc_masked = pw_times(pw_over_cable(init_iconc_mask[ion], c, 1.), iconc);
                 auto econc_masked = pw_times(pw_over_cable(init_econc_mask[ion], c, 1.), econc);
 
-                config.init_iconc[cv] += embedding.integrate_area(c.branch, iconc_masked);
-                config.init_econc[cv] += embedding.integrate_area(c.branch, econc_masked);
+                config.init_iconc[i] += embedding.integrate_area(c.branch, iconc_masked);
+                config.init_econc[i] += embedding.integrate_area(c.branch, econc_masked);
             }
 
             double oo_cv_area = 1./D.cv_area[cv];
-            config.reset_iconc[cv] *= oo_cv_area;
-            config.reset_econc[cv] *= oo_cv_area;
-            config.init_revpot[cv] *= oo_cv_area;
-            config.init_iconc[cv] *= oo_cv_area;
-            config.init_iconc[cv] *= oo_cv_area;
+            config.reset_iconc[i] *= oo_cv_area;
+            config.reset_econc[i] *= oo_cv_area;
+            config.init_revpot[i] *= oo_cv_area;
+            config.init_iconc[i] *= oo_cv_area;
+            config.init_iconc[i] *= oo_cv_area;
         }
 
         M.ions[ion] = std::move(config);

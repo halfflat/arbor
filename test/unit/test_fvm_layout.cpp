@@ -23,6 +23,11 @@ using util::make_span;
 using util::count_along;
 using util::value_by_key;
 
+// just for debug
+mlocation mkloc(unsigned b, double p) {
+    return mlocation{b, p};
+}
+
 namespace {
     double area(const segment* s) {
         if (auto soma = s->as_soma()) {
@@ -229,7 +234,6 @@ TEST(fvm_layout, coalescing_synapses) {
     {
         cable_cell cell = make_cell_ball_and_stick();
 
-        // Add synapses of two varieties.
         cell.place(mlocation{1, 0.3}, "expsyn");
         cell.place(mlocation{1, 0.5}, "expsyn");
         cell.place(mlocation{1, 0.7}, "expsyn");

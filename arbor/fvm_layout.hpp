@@ -43,6 +43,11 @@ struct cv_geometry {
         return partn[cell_idx];
     }
 
+    auto cell_cvs(size_type cell_idx) const {
+        auto partn = util::partition_view(cell_cv_divs);
+        return util::make_span(partn[cell_idx]);
+    }
+
     size_type size() const {
         arb_assert((cv_parent.empty() && cv_cables_divs.empty() &&
                     cv_cables.empty() && cv_to_cell.empty())
@@ -63,7 +68,7 @@ struct cv_geometry {
     }
 
     size_type location_cv(size_type cell_idx, mlocation loc) const {
-        return cell_cv_divs.at(cell_idx)+branch_cv_map.at(cell_idx).at(loc.branch).index_of(loc.pos);
+        return cell_cv_divs.at(cell_idx)+branch_cv_map.at(cell_idx).at(loc.branch)(loc.pos).second;
     }
 };
 
@@ -164,7 +169,7 @@ struct fvm_mechanism_data {
     std::unordered_map<std::string, fvm_ion_config> ions;
 
     // Total number of targets (point-mechanism points)
-    std::size_t ntarget = 0;
+    std::size_t n_target = 0;
 };
 
 fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& gprop, const std::vector<cable_cell>& cells, const fvm_cv_discretization& D);
