@@ -769,11 +769,11 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         config.kind = mechanismKind::point;
         config.param_values = {{"amplitude", {}}, {"delay", {}}, {"duration", {}}};
 
-        for (auto cv: cv_order) {
-            config.cv.push_back(cv);
-            config.param_values[0].second.push_back(stimuli[cv].item.amplitude);
-            config.param_values[1].second.push_back(stimuli[cv].item.delay);
-            config.param_values[2].second.push_back(stimuli[cv].item.duration);
+        for (auto i: cv_order) {
+            config.cv.push_back(stimuli_cv[i]);
+            config.param_values[0].second.push_back(stimuli[i].item.amplitude);
+            config.param_values[1].second.push_back(stimuli[i].item.delay);
+            config.param_values[2].second.push_back(stimuli[i].item.duration);
         }
 
         M.mechanisms["_builtin_stimulus"] = std::move(config);

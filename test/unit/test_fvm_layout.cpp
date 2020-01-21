@@ -23,11 +23,6 @@ using util::make_span;
 using util::count_along;
 using util::value_by_key;
 
-// just for debug
-mlocation mkloc(unsigned b, double p) {
-    return mlocation{b, p};
-}
-
 namespace {
     double area(const segment* s) {
         if (auto soma = s->as_soma()) {
