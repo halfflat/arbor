@@ -143,20 +143,13 @@ private:
     float event_weight_ = 0.01;
 };
 
-unsigned cell_n_cv(const arb::cable_cell& cell, const arb::cable_cell_global_properties& gprop) {
-    return 0; // TODO: make cv_geometry public?!
-}
-
 struct cell_stats {
     using size_type = unsigned;
     size_type ncells = 0;
     int nranks = 1;
     size_type nsegs = 0;
-    size_type ncomp = 0;
 
     cell_stats(arb::recipe& r, run_params params) {
-        auto gprop = arb::util::any_cast<arb::cable_cell_global_properties>(r.get_global_properties(arb::cell_kind::cable_cell));
-
 #ifdef ARB_MPI_ENABLED
         if(!params.dry_run) {
             int rank;
@@ -167,14 +160,11 @@ struct cell_stats {
             size_type b = rank*cells_per_rank;
             size_type e = (rank+1)*cells_per_rank;
             size_type nsegs_tmp = 0;
-            size_type ncomp_tmp = 0;
             for (size_type i=b; i<e; ++i) {
                 auto c = arb::util::any_cast<arb::cable_cell>(r.get_cell_description(i));
                 nsegs_tmp += c.morphology().num_branches();
-                ncomp_tmp += cell_n_cv(c);
             }
             MPI_Allreduce(&nsegs_tmp, &nsegs, 1, MPI_UNSIGNED, MPI_SUM, MPI_COMM_WORLD);
-            MPI_Allreduce(&ncomp_tmp, &ncomp, 1, MPI_UNSIGNED, MPI_SUM, MPI_COMM_WORLD);
         }
 #else
         if(!params.dry_run) {
@@ -183,7 +173,6 @@ struct cell_stats {
             for (size_type i = 0; i < ncells; ++i) {
                 auto c = arb::util::any_cast<arb::cable_cell>(r.get_cell_description(i));
                 nsegs += c.morphology().num_branches();
-                ncomp += cell_n_cv(c);
             }
         }
 #endif
@@ -194,11 +183,9 @@ struct cell_stats {
             for (size_type i = 0; i < params.num_cells_per_rank; ++i) {
                 auto c = arb::util::any_cast<arb::cable_cell>(r.get_cell_description(i));
                 nsegs += c.morphology().num_branches();
-                ncomp += cell_n_cv(c);
             }
 
             nsegs *= params.num_ranks;
-            ncomp *= params.num_ranks;
         }
     }
 
@@ -206,8 +193,7 @@ struct cell_stats {
         return o << "cell stats: "
                  << s.nranks << " ranks; "
                  << s.ncells << " cells; "
-                 << s.nsegs << " branches; "
-                 << s.ncomp << " compartments.";
+                 << s.nsegs << " branches. ";
     }
 };
 

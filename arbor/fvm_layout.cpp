@@ -267,7 +267,10 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset) {
             }
 
             // Ordering of CV ensures CV cables on any given branch are found sequentially.
-            bmap[cable.branch].push_back(cable.prox_pos, cable.dist_pos, cv);
+            // Omit empty cables.
+            if (cable.prox_pos<cable.dist_pos) {
+                bmap[cable.branch].push_back(cable.prox_pos, cable.dist_pos, cv);
+            }
         }
     }
 

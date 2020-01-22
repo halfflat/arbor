@@ -242,3 +242,50 @@ TEST(cv_geom, weird) {
     EXPECT_TRUE(seq_eq(expected2, geom.cables(2)));
 }
 
+TEST(cv_geom, location_cv) {
+    using namespace common_morphology;
+
+    cable_cell cell{m_reg_b6};
+
+    // Two CVs per branch, plus trivial CV at forks.
+    cv_geometry geom = cv_geometry_from_ends(cell,
+       join(ls::on_branches(0.0), ls::on_branches(0.5), ls::on_branches(1.)));
+
+    // Confirm CVs are all only one cable, and either trivial or half a branch.
+    for (auto cv: geom.cell_cvs(0)) {
+        auto cables = geom.cables(cv);
+        ASSERT_EQ(1u, cables.size());
+
+        mcable cable = cables.front();
+        ASSERT_TRUE(cable.prox_pos==cable.dist_pos ||
+                    (cable.prox_pos==0 && cable.dist_pos==0.5 )||
+                    (cable.prox_pos==0.5 && cable.dist_pos==1.));
+    }
+
+    // Where ambiguous, CV found should be one with a non-trivial cable containing the location.
+    for (auto bid: util::make_span(cell.morphology().num_branches())) {
+        for (double pos: {0., 0.3, 0.5, 0.7, 1.}) {
+            mlocation loc{bid, pos};
+            SCOPED_TRACE(loc);
+
+            auto cv = geom.location_cv(0, loc);
+
+            mcable cable = geom.cables(cv).front();
+            EXPECT_TRUE(cable.prox_pos<cable.dist_pos);
+            EXPECT_TRUE(cable.prox_pos<=pos);
+            EXPECT_TRUE(cable.dist_pos>=pos);
+            EXPECT_TRUE(cable.branch==loc.branch);
+        }
+    }
+
+    // CV 0 will comprise branches 0 and 2; CV 1 branches 1, 3, 5;
+    // and CV 2 branch 4 (see test cv_geom.weird above).
+    cv_geometry gweird = cv_geometry_from_ends(cell, as_locset(mlocation{1, 0}, mlocation{4,0}));
+
+    // Expect location (4, 0.) to be in CV 2, but colocated locations
+    // (3, 0.), (5, 0.) and (1, 1.) to be in CV 1.
+    EXPECT_EQ(2u, gweird.location_cv(0, mlocation{4, 0.}));
+    EXPECT_EQ(1u, gweird.location_cv(0, mlocation{3, 0.}));
+    EXPECT_EQ(1u, gweird.location_cv(0, mlocation{5, 0.}));
+    EXPECT_EQ(1u, gweird.location_cv(0, mlocation{1, 1.}));
+}
