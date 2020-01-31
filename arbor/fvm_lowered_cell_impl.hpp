@@ -54,7 +54,7 @@ public:
         const recipe& rec,
         std::vector<fvm_index_type>& cell_to_intdom,
         std::vector<target_handle>& target_handles,
-        probe_association_map<probe_handle>& probe_map) override;
+        probe_association_map<fvm_probe_handle>& probe_map) override;
 
     fvm_integration_result integrate(
         value_type tfinal,
@@ -136,6 +136,13 @@ private:
     void set_gpu() {
         if (context_.gpu->has_gpu()) context_.gpu->set_gpu();
     }
+
+    // Translate cell probe descriptions into probe handles.
+    // Return nullopt if nothing corresponds to the cell_probe_address (e.g. no such mechanism at that location, etc.).
+    util::optional<fvm_probe_handle> probe_address_to_handle(
+        std::size_t, const cell_probe_address&,
+        const fvm_cv_discretization&, const fvm_mechanism_data&,
+        const std::unordered_map<std::string, mechanism*>& mech_tbl);
 };
 
 template <typename Backend>
@@ -343,7 +350,7 @@ void fvm_lowered_cell_impl<B>::initialize(
     const recipe& rec,
     std::vector<fvm_index_type>& cell_to_intdom,
     std::vector<target_handle>& target_handles,
-    probe_association_map<probe_handle>& probe_map)
+    probe_association_map<fvm_probe_handle>& probe_map)
 {
     using util::any_cast;
     using util::count_along;
@@ -442,6 +449,9 @@ void fvm_lowered_cell_impl<B>::initialize(
 
     target_handles.resize(mech_data.n_target);
 
+    // Keep track of mechanisms by name for probe lookup.
+    std::unordered_map<std::string, mechanism*> mech_lookup_tbl;
+
     unsigned mech_id = 0;
     for (auto& m: mech_data.mechanisms) {
         auto& name = m.first;
@@ -503,10 +513,13 @@ void fvm_lowered_cell_impl<B>::initialize(
 
         if (config.kind==mechanismKind::revpot) {
             revpot_mechanisms_.push_back(mechanism_ptr(minst.mech.release()));
+            mech_lookup_tbl[name] = revpot_mechanisms_.back().get();
         }
         else {
             mechanisms_.push_back(mechanism_ptr(minst.mech.release()));
+            mech_lookup_tbl[name] = mechanisms_.back().get();
         }
+
     }
 
     // Collect detectors, probe handles.
@@ -526,21 +539,10 @@ void fvm_lowered_cell_impl<B>::initialize(
             probe_info pi = rec.get_probe({gid, j});
             auto where = any_cast<cell_probe_address>(pi.address);
 
-            auto cv = D.geometry.location_cv(cell_idx, where.location);
-            probe_handle handle;
-
-            switch (where.kind) {
-            case cell_probe_address::membrane_voltage:
-                handle = state_->voltage.data()+cv;
-                break;
-            case cell_probe_address::membrane_current:
-                handle = state_->current_density.data()+cv;
-                break;
-            default:
-                throw arbor_internal_error("fvm_lowered_cell: unrecognized probeKind");
+            // (Just ignore any mechanism data requests that do not correspond to a mechanism instance.)
+            if (auto opt_handle = probe_address_to_handle(cell_idx, where, D, mech_data, mech_lookup_tbl)) {
+                probe_map.insert({pi.id, {opt_handle.value(), pi.tag}});
             }
-
-            probe_map.insert({pi.id, {handle, pi.tag}});
         }
     }
 
@@ -644,5 +646,67 @@ fvm_size_type fvm_lowered_cell_impl<B>::fvm_intdom(
 
     return intdom_id;
 }
+
+template <typename B>
+util::optional<fvm_probe_handle> fvm_lowered_cell_impl<B>::probe_address_to_handle(
+     std::size_t cell_idx, const cell_probe_address& paddr,
+     const fvm_cv_discretization& D, const fvm_mechanism_data& M,
+     const std::unordered_map<std::string, mechanism*>& mech_tbl)
+{
+    using K = enum cable_cell_probe_kind;
+    const double* src = nullptr;
+    fvm_index_type cv = D.geometry.location_cv(cell_idx, paddr.location);
+
+    switch (paddr.kind) {
+    case K::membrane_voltage:
+        src = state_->voltage.data() + cv;
+        break;
+    case K::axial_current:
+        // Axial current will be implemented as a linear combination of voltage values...
+        throw arbor_internal_error("axial_current unimplemented");
+        break;
+    case K::mechanism_state:
+        if (mechanism* m = util::value_by_key(mech_tbl, paddr.source).value_or(nullptr)) {
+            const fvm_value_type* data = B::mechanism_field_data(m, paddr.key);
+            if (auto opt_i = util::binary_search_index(M.mechanisms.at(paddr.source).cv, cv)) {
+                src = data + opt_i.value();
+            }
+        }
+        break;
+    case K::total_ionic_current_density:
+        src = state_->current_density.data() + cv;
+        break;
+    case K::ionic_current_density:
+        if (state_->ion_data.count(paddr.source)) {
+            const fvm_value_type* data = state_->ion_data.at(paddr.source).iX_.data();
+            if (auto opt_i = util::binary_search_index(M.ions.at(paddr.source).cv, cv)) {
+                src = data + opt_i.value();
+            }
+        }
+        break;
+    case K::ion_int_concentration:
+        if (state_->ion_data.count(paddr.source)) {
+            const fvm_value_type* data = state_->ion_data.at(paddr.source).Xi_.data();
+            if (auto opt_i = util::binary_search_index(M.ions.at(paddr.source).cv, cv)) {
+                src = data + opt_i.value();
+            }
+        }
+        break;
+    case K::ion_ext_concentration:
+        if (state_->ion_data.count(paddr.source)) {
+            const fvm_value_type* data = state_->ion_data.at(paddr.source).Xo_.data();
+            if (auto opt_i = util::binary_search_index(M.ions.at(paddr.source).cv, cv)) {
+                src = data + opt_i.value();
+            }
+        }
+        break;
+    default:
+        throw arbor_internal_error("fvm_lowered_cell: unrecognized probe kind");
+    }
+
+    if (src) return src;
+    return util::nullopt;
+}
+
 
 } // namespace arb

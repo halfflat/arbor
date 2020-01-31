@@ -38,7 +38,7 @@ TEST(probe, fvm_lowered_cell) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell lcell(context);
     lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
@@ -50,9 +50,9 @@ TEST(probe, fvm_lowered_cell) {
     EXPECT_EQ(20, probe_map.at({0, 1}).tag);
     EXPECT_EQ(30, probe_map.at({0, 2}).tag);
 
-    probe_handle p0 = probe_map.at({0, 0}).handle;
-    probe_handle p1 = probe_map.at({0, 1}).handle;
-    probe_handle p2 = probe_map.at({0, 2}).handle;
+    fvm_probe_handle p0 = probe_map.at({0, 0}).handle;
+    fvm_probe_handle p1 = probe_map.at({0, 1}).handle;
+    fvm_probe_handle p2 = probe_map.at({0, 2}).handle;
 
     // Expect initial probe values to be the resting potential
     // for the voltage probes (cell membrane potential should

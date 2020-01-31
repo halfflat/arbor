@@ -51,10 +51,8 @@ inline deliverable_event_data event_data(const deliverable_event& ev) {
 
 // Sample events (scalar values)
 
-using probe_handle = const fvm_value_type*;
-
 struct raw_probe_info {
-    probe_handle handle;      // where the to-be-probed value sits
+    fvm_probe_handle handle;      // where the to-be-probed value sits
     sample_size_type offset;  // offset into array to store raw probed value
 };
 

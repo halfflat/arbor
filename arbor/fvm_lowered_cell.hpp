@@ -31,7 +31,7 @@ struct fvm_lowered_cell {
         const recipe& rec,
         std::vector<fvm_index_type>& cell_to_intdom,
         std::vector<target_handle>& target_handles,
-        probe_association_map<probe_handle>& probe_map) = 0;
+        probe_association_map<fvm_probe_handle>& probe_map) = 0;
 
     virtual fvm_integration_result integrate(
         fvm_value_type tfinal,

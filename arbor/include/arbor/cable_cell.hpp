@@ -30,13 +30,50 @@ struct lid_range {
 };
 
 // Probe type for cell descriptions.
+//
+// All probes currently return data as `const double`, but this may
+// change in the future. Probe kinds are interpreted as follows.
+//
+// membrane_voltage:
+//     Voltage estimate [mV] at <location>,  possibly interpolated.
+//
+// axial_current:
+//     Intracellular current [A] at <location>, in distal direction.
+//
+// mechanism_state:
+//     Value of state variable <key> in mechanism <source> in CV
+//     at <location>. (Peeking into point mechanisms is not yet
+//     supported.)
+//
+// total_ionic_current_density:
+//     Total current density [A/m²] across membrane excluding capacitive
+//     current at <location>.
+//
+// ionic_current_density:
+//     Current density [A/m²] across membrane attributed to the
+//     ion <source> at <location>.
+//
+// ion_int_concentration:
+// ion_ext_concentration:
+//     Ionic internal (resp. external) concentration [mmol/L] of
+//     ion <source> at <location>, possibly interpolated.
+
+enum class cable_cell_probe_kind {
+    membrane_voltage,
+    axial_current, //  -- not supported yet!
+    mechanism_state,
+    total_ionic_current_density,
+    ionic_current_density,
+    ion_int_concentration,
+    ion_ext_concentration
+};
+
 struct cell_probe_address {
-    enum probe_kind {
-        membrane_voltage, membrane_current
-    };
+    cable_cell_probe_kind kind;
 
     mlocation location;
-    probe_kind kind;
+    std::string source; // ion name for ion data, mechanism name for mechanism state.
+    std::string key;    // mechanism state variable name.
 };
 
 // Forward declare the implementation, for PIMPL.

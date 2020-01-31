@@ -7,6 +7,7 @@
 #include <vector>
 
 #include <arbor/common_types.hpp>
+#include <arbor/fvm_types.hpp>
 #include <arbor/recipe.hpp>
 #include <arbor/sampling.hpp>
 #include <arbor/spike.hpp>
@@ -89,7 +90,7 @@ private:
     std::vector<target_handle> target_handles_;
 
     // Maps probe ids to probe handles (from lowered cell) and tags (from probe descriptions).
-    probe_association_map<probe_handle> probe_map_;
+    probe_association_map<fvm_probe_handle> probe_map_;
 
     // Collection of samplers to be run against probes in this group.
     sampler_association_map sampler_map_;

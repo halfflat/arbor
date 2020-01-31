@@ -4,12 +4,12 @@
 #include <utility>
 #include <vector>
 
-#include <arbor/fvm_types.hpp>
 #include <arbor/cable_cell.hpp>
 #include <arbor/mechanism.hpp>
 #include <arbor/mechinfo.hpp>
 #include <arbor/mechcat.hpp>
 #include <arbor/recipe.hpp>
+#include <arbor/util/optional.hpp>
 
 #include "util/piecewise.hpp"
 #include "util/rangeutil.hpp"

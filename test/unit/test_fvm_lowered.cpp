@@ -216,7 +216,7 @@ TEST(fvm_lowered, matrix_init)
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell fvcell(context);
     fvcell.initialize({0}, cable1d_recipe(cell), cell_to_intdom, targets, probe_map);
@@ -262,7 +262,7 @@ TEST(fvm_lowered, target_handles) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     auto test_target_handles = [&](fvm_cell& cell) {
         mechanism *expsyn = find_mechanism(cell, "expsyn");
@@ -338,7 +338,7 @@ TEST(fvm_lowered, stimulus) {
     const auto& A = D.cv_area;
 
     std::vector<target_handle> targets;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell fvcell(context);
     fvcell.initialize({0}, cable1d_recipe(cells), cell_to_intdom, targets, probe_map);
@@ -428,7 +428,7 @@ TEST(fvm_lowered, derived_mechs) {
 
         std::vector<target_handle> targets;
         std::vector<fvm_index_type> cell_to_intdom;
-        probe_association_map<probe_handle> probe_map;
+        probe_association_map<fvm_probe_handle> probe_map;
 
         execution_context context;
         fvm_cell fvcell(context);
@@ -493,7 +493,7 @@ TEST(fvm_lowered, read_valence) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     {
         std::vector<cable_cell> cells(1);
@@ -638,7 +638,7 @@ TEST(fvm_lowered, ionic_currents) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell fvcell(context);
     fvcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
@@ -676,7 +676,7 @@ TEST(fvm_lowered, point_ionic_current) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell fvcell(context);
     fvcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
@@ -749,7 +749,7 @@ TEST(fvm_lowered, weighted_write_ion) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<probe_handle> probe_map;
+    probe_association_map<fvm_probe_handle> probe_map;
 
     fvm_cell fvcell(context);
     fvcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
