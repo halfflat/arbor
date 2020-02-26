@@ -344,6 +344,8 @@ fvm_cv_discretization& append(fvm_cv_discretization& dczn, const fvm_cv_discreti
     append(dczn.temperature_K, right.temperature_K);
     append(dczn.diam_um, right.diam_um);
 
+    append(dczn.axial_resistivity, right.axial_resistivity);
+
     return dczn;
 }
 
@@ -369,6 +371,14 @@ fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell
     double dflt_capacitance = *(dflt.membrane_capacitance | global_dflt.membrane_capacitance);
     double dflt_potential =   *(dflt.init_membrane_potential | global_dflt.init_membrane_potential);
     double dflt_temperature = *(dflt.temperature_K | global_dflt.temperature_K);
+
+    D.axial_resistivity.resize(1);
+    msize_t n_branch = D.geometry.n_branch(0);
+    D.axial_resistivity[0].reserve(n_branch);
+    for (msize_t i = 0; i<n_branch; ++i) {
+        D.axial_resistivity[0].push_back(pw_over_cable(cell.region_assignments().get<axial_resistivity>(),
+                    mcable{i, 0., 1.}, dflt_resistivity));
+    }
 
     const auto& embedding = cell.embedding();
     for (auto i: count_along(D.geometry.cv_parent)) {
@@ -406,8 +416,10 @@ fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell
             }
 
             mcable span{bid, parent_refpt, cv_refpt};
-            double resistance = embedding.integrate_ixa(bid,
-                pw_over_cable(cell.region_assignments().get<axial_resistivity>(), span, dflt_resistivity));
+            double resistance = embedding.integrate_ixa(span, D.axial_resistivity[0].at(bid));
+            //
+            //double resistance = embedding.integrate_ixa(bid,
+                //pw_over_cable(cell.region_assignments().get<axial_resistivity>(), span, dflt_resistivity));
             D.face_conductance[i] = 100/resistance; // 100 scales to µS.
         }
 
@@ -454,6 +466,73 @@ fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells,
     }
     return combined;
 }
+
+// Use fvm_cv_discretiztion data to compute pertinent CV indices and weights for
+// interpolated probe sites.
+
+struct interpolant_reference_point {
+    fvm_index_type cv;
+    mlocation loc;
+};
+
+static std::pair<interpolant_reference_point, interpolant_reference_point>
+site_reference_points(const fvm_cv_discretization& D, fvm_size_type cell_idx, mlocation site) {
+    // Reference points are the closet points bracketting site (on the same branch) where the
+    // voltage of the corresponding CV is assumed to be exact.
+    //
+    // Voltages are assumed to be constant over branches that are strictly internal to a CV.
+
+    auto cv_refpt = [&D, bid = site.branch](fvm_index_type cv) {
+        // Under the assumption that the CV intersects given branch, return
+        // the midpoint of the CV if it is unbranched, else an end of the branch
+        // that is contained in the CV.
+
+        auto cv_cables = D.cables(cv);
+        if (cv_cables.size()==1) {
+            mcable cv_cable = cv_cables.front();
+            return mlocation{bid, 0.5*(cv_cable.prox_pos+cv_cable.dist_pos)};
+        }
+        else if (cv_cables.front().branch==bid) {
+            return mlocation{bid, 1.}; 
+        }
+        else {
+            return mlocation{bid, 0.}; 
+        }
+    };
+
+    fvm_index_type cv0 = D.location_cv(cell_idx, site);
+    mlocation cv0_ref = cv_refpt(cv0);
+    arb_assert(D.location_cv(cell_idx, mlocation{site.branch, cv0_ref})==cv0);
+
+    double cv0_ref;
+
+    auto cv0_cables = D.cables(cv0);
+    if (cv0_cables.size()==1) {
+        mcable cv_cable = cv_cables.front();
+        cv0_ref = 0.5*(cv_cable.prox_pos+cv_cable.dist_pos);
+    }
+    else if (cv0_cables.front().branch==site.branch) {
+        // Site is on the most proximal cable in the CV; take the distal end of the branch
+        // as reference point.
+        cv0_ref = 1.;
+    }
+    else {
+        // Otherwise can wlog take proximal end of the branch as reference point.
+        cv0_ref = 0.;
+    }
+
+    // The other reference point will be taken from either the parent CV (if it exists
+    // and intersects this branch) or from the child CV on this branch (if it exists).
+
+}
+
+fvm_voltage_interpolant fvm_interpolate_voltage(const fvm_cv_discretization& D, fvm_size_type cell_idx, mlocation site) {
+    ...;
+}
+
+// Interpolated axial current.
+fvm_voltage_interpolant fvm_interpolate_current(const fvm_cv_discretization& D, fvm_size_type cell_idx, mlocation site) {
+...;
 
 // CVs are absolute (taken from combined discretization) so do not need to be shifted.
 // Only target numbers need to be shifted.

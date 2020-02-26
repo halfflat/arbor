@@ -3,6 +3,7 @@
 #include <vector>
 #include <stack>
 
+#include <arbor/assert.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/primitives.hpp>
 #include <arbor/morph/morphexcept.hpp>
@@ -36,13 +37,13 @@ bool is_disjoint(const mcable& a, const mcable& b) {
 
 // Take the union of two cable sections that are not disjoint.
 mcable make_union(const mcable& a, const mcable& b) {
-    assert(!is_disjoint(a,b));
+    arb_assert(!is_disjoint(a,b));
     return mcable{a.branch, std::min(a.prox_pos, b.prox_pos), std::max(a.dist_pos, b.dist_pos)};
 }
 
 // Take the intersection of two cable sections that are not disjoint.
 mcable make_intersection(const mcable& a, const mcable& b) {
-    assert(!is_disjoint(a,b));
+    arb_assert(!is_disjoint(a,b));
 
     return mcable{a.branch, std::max(a.prox_pos, b.prox_pos), std::min(a.dist_pos, b.dist_pos)};
 }

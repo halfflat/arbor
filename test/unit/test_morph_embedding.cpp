@@ -142,9 +142,6 @@ TEST(embedding, samples_and_branch_length) {
     }
 }
 
-// TODO: integrator tests
-
-
 TEST(embedding, partial_branch_length) {
     using pvec = std::vector<msize_t>;
     using svec = std::vector<msample>;
@@ -162,17 +159,25 @@ TEST(embedding, partial_branch_length) {
     morphology m(sample_tree(samples, parents), false);
     embedding em(m);
 
-    EXPECT_DOUBLE_EQ(30., em.branch_length(0));
-    EXPECT_DOUBLE_EQ(30., em.integrate_length(mcable{0, 0., 1.}));
-    EXPECT_DOUBLE_EQ(15., em.integrate_length(mcable{0, 0.25, 0.75}));
+    const double expected_bl0 = 30;
+    EXPECT_DOUBLE_EQ(expected_bl0, em.branch_length(0));
+    EXPECT_DOUBLE_EQ(expected_bl0, em.integrate_length(mcable{0, 0., 1.}));
+    EXPECT_DOUBLE_EQ(expected_bl0*0.5, em.integrate_length(mcable{0, 0.25, 0.75}));
 
-    EXPECT_DOUBLE_EQ(10., em.branch_length(1));
-    EXPECT_DOUBLE_EQ(10., em.integrate_length(mcable{1, 0., 1.}));
-    EXPECT_DOUBLE_EQ(7.5, em.integrate_length(mcable{1, 0.25, 1.0}));
+    const double expected_bl1 = 10;
+    EXPECT_DOUBLE_EQ(expected_bl1, em.branch_length(1));
+    EXPECT_DOUBLE_EQ(expected_bl1, em.integrate_length(mcable{1, 0., 1.}));
+    EXPECT_DOUBLE_EQ(expected_bl1*0.75, em.integrate_length(mcable{1, 0.25, 1.0}));
 
     // Expect 2*0.25+3*0.5 = 2.0 times corresponding cable length.
     pw_elements<double> pw({0.25, 0.5, 1.}, {2., 3.});
-    EXPECT_DOUBLE_EQ(20., em.integrate_length(1, pw));
+    EXPECT_DOUBLE_EQ(expected_bl0*2.0, em.integrate_length(0, pw));
+    EXPECT_DOUBLE_EQ(expected_bl1*2.0, em.integrate_length(1, pw));
+
+    // Expect 2*0.125+3*0.125 = 0.625 times corresponding cable length,
+    // restricting pw to subinterval [0.375, 0.625].
+    EXPECT_DOUBLE_EQ(expected_bl0*0.625, em.integrate_length(mcable{0, 0.375, 0.625}, pw));
+    EXPECT_DOUBLE_EQ(expected_bl1*0.625, em.integrate_length(mcable{1, 0.375, 0.625}, pw));
 
     // Distamce between points on different branches:
     ASSERT_EQ(3u, m.num_branches());
@@ -252,3 +257,4 @@ TEST(embedding, partial_area) {
     double expected_ixa = 3/(9.5*8)/pi;
     EXPECT_TRUE(near_relative(expected_ixa, em.integrate_ixa(mcable{1, 0.1, 0.4}), reltol));
 }
+

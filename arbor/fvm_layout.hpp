@@ -67,6 +67,12 @@ struct cv_geometry {
         return cell_cv_divs.empty()? 0: cell_cv_divs.size()-1;
     }
 
+    size_type n_branch(size_type cell_idx) const {
+        return branch_cv_map.at(cell_idx).size();
+    }
+
+    // Note: CV queries for a location that lies on the boundary between two CVs
+    // will return the distal CV.
     size_type location_cv(size_type cell_idx, mlocation loc) const {
         return cell_cv_divs.at(cell_idx)+branch_cv_map.at(cell_idx).at(loc.branch)(loc.pos).second;
     }
@@ -85,6 +91,9 @@ cv_geometry cv_geometry_from_ends(const cable_cell& cell, const locset& lset);
 // diam_um is taken to be the diameter of a CV with constant diameter and same
 // extent which has the same surface area (i.e. cv_area/(πL) where L is the
 // total length of the cables comprising the CV.)
+//
+// The bulk conductivity over the morphology is recorded here as well, for
+// calculating voltage and axial current interpolating probes.
 
 struct fvm_cv_discretization {
     using size_type = fvm_size_type;
@@ -97,12 +106,16 @@ struct fvm_cv_discretization {
     size_type size() const { return geometry.size(); }
     size_type n_cell() const { return geometry.n_cell(); }
 
+    // Following members have one element per CV.
     std::vector<value_type> face_conductance; // [µS]
     std::vector<value_type> cv_area;          // [µm²]
     std::vector<value_type> cv_capacitance;   // [pF]
     std::vector<value_type> init_membrane_potential; // [mV]
     std::vector<value_type> temperature_K;    // [K]
     std::vector<value_type> diam_um;          // [µm]
+
+    // For each cell, one piece-wise constant value per branch.
+    std::vector<std::vector<pw_constant_fn>> axial_resistivity; // [Ω·cm]
 };
 
 // Combine two fvm_cv_geometry groups in-place.
@@ -110,9 +123,22 @@ struct fvm_cv_discretization {
 fvm_cv_discretization& append(fvm_cv_discretization&, const fvm_cv_discretization&);
 
 // Construct fvm_cv_discretization from one or more cells.
-
 fvm_cv_discretization fvm_cv_discretize(const cable_cell& cell, const cable_cell_parameter_set& global_dflt);
 fvm_cv_discretization fvm_cv_discretize(const std::vector<cable_cell>& cells, const cable_cell_parameter_set& global_defaults);
+
+// Interpolant data for voltage, axial current probes.
+// The proximal CV will always be either the same as distal CV (trivial interpolation)
+// or the parent of the distal CV.
+struct fvm_voltage_interpolant {
+    fvm_index_type proximal_cv, distal_cv;
+    fvm_value_type proximal_coef, distal_coef;
+};
+
+// Interpolated membrane voltage.
+fvm_voltage_interpolant fvm_interpolate_voltage(const fvm_cv_discretization& D, fvm_size_type cell_idx, mlocation site);
+
+// Interpolated axial current.
+fvm_voltage_interpolant fvm_interpolate_current(const fvm_cv_discretization& D, fvm_size_type cell_idx, mlocation site);
 
 // Post-discretization data for point and density mechanism instantiation.
 
