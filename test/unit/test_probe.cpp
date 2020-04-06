@@ -1,11 +1,17 @@
 #include "../gtest.h"
 
-#include <arbor/common_types.hpp>
 #include <arbor/cable_cell.hpp>
+#include <arbor/common_types.hpp>
+#include <arbor/version.hpp>
+#include <arborenv/gpu_env.hpp>
 
 #include "backends/event.hpp"
 #include "backends/multicore/fvm.hpp"
+#ifdef ARB_GPU_ENABLED
+#include "backends/gpu/fvm.hpp"
+#endif
 #include "fvm_lowered_cell_impl.hpp"
+#include "memory/cuda_wrappers.hpp"
 #include "util/rangeutil.hpp"
 
 #include "common.hpp"
@@ -13,13 +19,49 @@
 #include "../simple_recipes.hpp"
 
 using namespace arb;
-using fvm_cell = fvm_lowered_cell_impl<multicore::backend>;
-using shared_state = multicore::backend::shared_state;
 
-ACCESS_BIND(std::unique_ptr<shared_state> fvm_cell::*, fvm_state_ptr, &fvm_cell::state_);
+using multicore_fvm_cell = fvm_lowered_cell_impl<multicore::backend>;
+using multicore_shared_state = multicore::backend::shared_state;
+ACCESS_BIND(std::unique_ptr<multicore_shared_state> multicore_fvm_cell::*, multicore_fvm_state_ptr, &multicore_fvm_cell::state_);
 
-TEST(probe, fvm_lowered_cell) {
-    execution_context context;
+template <typename Backend>
+struct backend_access {
+    using fvm_cell = multicore_fvm_cell;
+
+    static multicore_shared_state& state(fvm_cell& cell) {
+        return *(cell.*multicore_fvm_state_ptr).get();
+    }
+
+    static fvm_value_type deref(const fvm_value_type* p) { return *p; }
+};
+
+#ifdef ARB_GPU_ENABLED
+
+using gpu_fvm_cell = fvm_lowered_cell_impl<gpu::backend>;
+using gpu_shared_state = gpu::backend::shared_state;
+ACCESS_BIND(std::unique_ptr<gpu_shared_state> gpu_fvm_cell::*, gpu_fvm_state_ptr, &gpu_fvm_cell::state_);
+
+template <>
+struct backend_access<gpu::backend> {
+    using fvm_cell = gpu_fvm_cell;
+
+    static gpu_shared_state& state(fvm_cell& cell) {
+        return *(cell.*gpu_fvm_state_ptr).get();
+    }
+
+    static fvm_value_type deref(const fvm_value_type* p) {
+        fvm_value_type r;
+        memory::cuda_memcpy_d2h(&r, p, sizeof(r));
+        return r;
+    }
+};
+
+#endif
+
+template <typename Backend>
+void run_probe_test(const context& ctx) {
+    using fvm_cell = typename backend_access<Backend>::fvm_cell;
+    auto deref = [](const fvm_value_type* p) { return backend_access<Backend>::deref(p); };
 
     cable_cell bs = make_cell_ball_and_stick(false);
 
@@ -40,7 +82,7 @@ TEST(probe, fvm_lowered_cell) {
     std::vector<fvm_index_type> cell_to_intdom;
     probe_association_map<probe_handle> probe_map;
 
-    fvm_cell lcell(context);
+    fvm_cell lcell(*ctx);
     lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
 
     EXPECT_EQ(3u, rec.num_probes(0));
@@ -58,16 +100,16 @@ TEST(probe, fvm_lowered_cell) {
     // for the voltage probes (cell membrane potential should
     // be constant), and zero for the current probe.
 
-    auto& state = *(lcell.*fvm_state_ptr).get();
+    auto& state = backend_access<Backend>::state(lcell);
     auto& voltage = state.voltage;
 
-    auto resting = voltage[0];
+    fvm_value_type resting = voltage[0];
     EXPECT_NE(0.0, resting);
 
     // (Probe handles are just pointers in this implementation).
-    EXPECT_EQ(resting, *p0);
-    EXPECT_EQ(resting, *p1);
-    EXPECT_EQ(0.0, *p2);
+    EXPECT_EQ(resting, deref(p0));
+    EXPECT_EQ(resting, deref(p1));
+    EXPECT_EQ(0.0, deref(p2));
 
     // After an integration step, expect voltage probe values
     // to differ from resting, and between each other, and
@@ -78,11 +120,26 @@ TEST(probe, fvm_lowered_cell) {
 
     lcell.integrate(0.01, 0.0025, {}, {});
 
-    EXPECT_NE(resting, *p0);
-    EXPECT_NE(resting, *p1);
-    EXPECT_NE(*p0, *p1);
-    EXPECT_NE(0.0, *p2);
+    EXPECT_NE(resting, deref(p0));
+    EXPECT_NE(resting, deref(p1));
+    EXPECT_NE(deref(p0), deref(p1));
+    EXPECT_NE(0.0, deref(p2));
 
-    EXPECT_EQ(voltage[0], *p0);
+    fvm_value_type v = voltage[0];
+    EXPECT_EQ(v, deref(p0));
 }
+
+TEST(probe, multicore_fvm_lowered_cell) {
+    context ctx = make_context();
+    run_probe_test<multicore::backend>(ctx);
+}
+
+#ifdef ARB_GPU_ENABLED
+TEST(probe, gpu_fvm_lowered_cell) {
+    context ctx = make_context(proc_allocation{1, arbenv::default_gpu()});
+    if (has_gpu(ctx)) {
+        run_probe_test<gpu::backend>(ctx);
+    }
+}
+#endif
 
