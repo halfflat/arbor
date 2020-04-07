@@ -2,6 +2,8 @@
 
 #include <arbor/cable_cell.hpp>
 #include <arbor/common_types.hpp>
+#include <arbor/mechcat.hpp>
+#include <arbor/mechinfo.hpp>
 #include <arbor/version.hpp>
 #include <arborenv/gpu_env.hpp>
 
@@ -15,6 +17,7 @@
 #include "util/rangeutil.hpp"
 
 #include "common.hpp"
+#include "unit_test_catalogue.hpp"
 #include "../common_cells.hpp"
 #include "../simple_recipes.hpp"
 
@@ -23,6 +26,7 @@ using namespace arb;
 using multicore_fvm_cell = fvm_lowered_cell_impl<multicore::backend>;
 using multicore_shared_state = multicore::backend::shared_state;
 ACCESS_BIND(std::unique_ptr<multicore_shared_state> multicore_fvm_cell::*, multicore_fvm_state_ptr, &multicore_fvm_cell::state_);
+
 
 template <typename Backend>
 struct backend_access {
@@ -129,31 +133,6 @@ void run_v_i_probe_test(const context& ctx) {
     EXPECT_EQ(v, deref(p0));
 }
 
-#if 0
-struct cable1d_with_eventgen: cable1d_recipe {
-    template <typename Seq>
-    cable1d_with_eventgen(const Seq& cells, bool coalesce):
-        cable1d_recipe(cells, coalesce) {}
-
-    cable1d_with_eventgen(const cable_cell& cell, bool coalesce):
-        cable1d_recipe(cell, coalesce) {}
-
-    std::vector<event_generator> event_generators(cell_gid_type gid) {
-        if (generators_on_.count(gid)) {
-            return generators_on_.at(gid);
-        }
-        return {}
-    }
-
-    void add_event_generator(cell_gid_type gid, event_generator eg) {
-        generators_on_[gid].push_back(std::move(eg));
-    }
-
-private:
-    std::unordered_map<cell_gid_type, std::vector<event_generator>> generators_on_;
-};
-#endif
-
 template <typename Backend>
 void run_expsyn_g_probe_test(const context& ctx, bool coalesce_synapses = false) {
     using fvm_cell = typename backend_access<Backend>::fvm_cell;
@@ -230,6 +209,115 @@ void run_expsyn_g_probe_test(const context& ctx, bool coalesce_synapses = false)
     }
 }
 
+template <typename Backend>
+void run_ion_density_probe_test(const context& ctx) {
+    using fvm_cell = typename backend_access<Backend>::fvm_cell;
+    auto deref = [](const fvm_value_type* p) { return backend_access<Backend>::deref(p); };
+
+    // Use test mechanism write_Xi_Xo to check ion concentration probes and
+    // density mechanism state probes.
+
+    auto cat = make_unit_test_catalogue();
+    cat.derive("write_ca1", "write_Xi_Xo", {{"xi0", 1.25}, {"xo0", 1.5}, {"s0", 1.75}}, {{"x", "ca"}});
+    cat.derive("write_ca2", "write_Xi_Xo", {{"xi0", 2.25}, {"xo0", 2.5}, {"s0", 2.75}}, {{"x", "ca"}});
+    cat.derive("write_na3", "write_Xi_Xo", {{"xi0", 3.25}, {"xo0", 3.5}, {"s0", 3.75}}, {{"x", "na"}});
+
+    // Simple constant diameter cable, 3 CVs.
+
+    cable_cell cable(sample_tree({msample{{0., 0., 0., 1.}, 0}, msample{{100., 0., 0., 1.}, 0}}, {mnpos, 0u}));
+    cable.default_parameters.discretization = cv_policy_fixed_per_branch(3);
+
+    // Calcium ions everywhere, half written by write_ca1, half by write_ca2.
+    // Sodium ions only on distal half.
+
+    cable.paint(mcable{0, 0., 0.5}, "write_ca1");
+    cable.paint(mcable{0, 0.5, 1.}, "write_ca2");
+    cable.paint(mcable{0, 0.5, 1.}, "write_na3");
+
+    // Place probes in each CV.
+
+    mlocation loc0{0, 0.1};
+    mlocation loc1{0, 0.5};
+    mlocation loc2{0, 0.9};
+
+    cable1d_recipe rec(cable);
+    rec.catalogue() = cat;
+
+    // Probe (0, 0): ca internal on CV 0.
+    rec.add_probe(0, 0, cell_probe_ion_int_concentration{loc0, "ca"});
+    // Probe (0, 1): ca internal on CV 1.
+    rec.add_probe(0, 0, cell_probe_ion_int_concentration{loc1, "ca"});
+    // Probe (0, 2): ca internal on CV 2.
+    rec.add_probe(0, 0, cell_probe_ion_int_concentration{loc2, "ca"});
+
+    // Probe (0, 3): ca external on CV 0.
+    rec.add_probe(0, 0, cell_probe_ion_ext_concentration{loc0, "ca"});
+    // Probe (0, 4): ca external on CV 1.
+    rec.add_probe(0, 0, cell_probe_ion_ext_concentration{loc1, "ca"});
+    // Probe (0, 5): ca external on CV 2.
+    rec.add_probe(0, 0, cell_probe_ion_ext_concentration{loc2, "ca"});
+ 
+    // Probe (0, 6): na internal on CV 0.
+    rec.add_probe(0, 0, cell_probe_ion_int_concentration{loc0, "na"});
+    // Probe (0, 7): na internal on CV 2.
+    rec.add_probe(0, 0, cell_probe_ion_int_concentration{loc2, "na"});
+
+    // Probe (0, 8): write_ca2 state 's' in CV 0.
+    rec.add_probe(0, 0, cell_probe_density_state{loc0, "write_ca2", "s"});
+    // Probe (0, 9): write_ca2 state 's' in CV 1.
+    rec.add_probe(0, 0, cell_probe_density_state{loc1, "write_ca2", "s"});
+    // Probe (0, 10): write_ca2 state 's' in CV 2.
+    rec.add_probe(0, 0, cell_probe_density_state{loc2, "write_ca2", "s"});
+
+    std::vector<target_handle> targets;
+    std::vector<fvm_index_type> cell_to_intdom;
+    probe_association_map<probe_handle> probe_map;
+
+    fvm_cell lcell(*ctx);
+    lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
+
+    // Should be no sodium ion instantiated on CV 0, so probe (0, 6) should
+    // have been silently discared. Similarly, write_ca2 is not instantiated on
+    // CV 0, and so probe (0, 8) should have been discarded. All other probes
+    // should be in the map.
+
+    EXPECT_EQ(11u, rec.num_probes(0));
+    EXPECT_EQ(9u, probe_map.size());
+
+    probe_handle ca_int_cv0 = probe_map.at({0, 0}).handle;
+    probe_handle ca_int_cv1 = probe_map.at({0, 1}).handle;
+    probe_handle ca_int_cv2 = probe_map.at({0, 2}).handle;
+    probe_handle ca_ext_cv0 = probe_map.at({0, 3}).handle;
+    probe_handle ca_ext_cv1 = probe_map.at({0, 4}).handle;
+    probe_handle ca_ext_cv2 = probe_map.at({0, 5}).handle;
+    EXPECT_EQ(0u, probe_map.count({0, 6}));
+    probe_handle na_int_cv2 = probe_map.at({0, 7}).handle;
+    EXPECT_EQ(0u, probe_map.count({0, 8}));
+    probe_handle write_ca2_s_cv1 = probe_map.at({0, 9}).handle;
+    probe_handle write_ca2_s_cv2 = probe_map.at({0, 10}).handle;
+
+    // Ion concentrations should have been written in initialization.
+    // For CV 1, calcium concentration should be mean of the two values
+    // from write_ca1 and write_ca2.
+
+    EXPECT_EQ(1.25, deref(ca_int_cv0));
+    EXPECT_DOUBLE_EQ((1.25+2.25)/2., deref(ca_int_cv1));
+    EXPECT_EQ(2.25, deref(ca_int_cv2));
+
+    EXPECT_EQ(1.5, deref(ca_ext_cv0));
+    EXPECT_DOUBLE_EQ((1.5+2.5)/2., deref(ca_ext_cv1));
+    EXPECT_EQ(2.5, deref(ca_ext_cv2));
+
+    EXPECT_EQ(3.25, deref(na_int_cv2));
+
+    // State variable in write_ca2 should be the same in both CV 1 and 2.
+    // The raw handles should be different addresses, however.
+
+    EXPECT_EQ(2.75, deref(write_ca2_s_cv1));
+    EXPECT_EQ(2.75, deref(write_ca2_s_cv2));
+    EXPECT_NE(write_ca2_s_cv1, write_ca2_s_cv2);
+}
+
 TEST(probe, multicore_v_i) {
     context ctx = make_context();
     run_v_i_probe_test<multicore::backend>(ctx);
@@ -241,6 +329,11 @@ TEST(probe, multicore_expsyn_g) {
     run_expsyn_g_probe_test<multicore::backend>(ctx, false);
     SCOPED_TRACE("coalesced synapses");
     run_expsyn_g_probe_test<multicore::backend>(ctx, true);
+}
+
+TEST(probe, multicore_ion_conc) {
+    context ctx = make_context();
+    run_ion_density_probe_test<multicore::backend>(ctx);
 }
 
 #ifdef ARB_GPU_ENABLED
@@ -260,5 +353,13 @@ TEST(probe, gpu_expsyn_g) {
         run_expsyn_g_probe_test<gpu::backend>(ctx, true);
     }
 }
+
+TEST(probe, multicore_ion_conc) {
+    context ctx = make_context(proc_allocation{1, arbenv::default_gpu()});
+    if (has_gpu(ctx)) {
+        run_ion_density_probe_test<gpu::backend>(ctx);
+    }
+}
+
 #endif
 
