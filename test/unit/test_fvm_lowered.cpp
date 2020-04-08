@@ -662,7 +662,7 @@ TEST(fvm_lowered, ionic_currents) {
 
     const double jca = 1.5;
     mechanism_desc m1("fixed_ica_current");
-    m1["ica_density"] = jca;
+    m1["current_density"] = jca;
 
     // Mechanism models a well-mixed fixed-depth volume without replenishment,
     // giving a linear response to ica over time.

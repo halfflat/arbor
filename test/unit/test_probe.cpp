@@ -318,6 +318,131 @@ void run_ion_density_probe_test(const context& ctx) {
     EXPECT_NE(write_ca2_s_cv1, write_ca2_s_cv2);
 }
 
+template <typename Backend>
+void run_ion_current_probe_test(const context& ctx) {
+    using fvm_cell = typename backend_access<Backend>::fvm_cell;
+    auto deref = [](const fvm_value_type* p) { return backend_access<Backend>::deref(p); };
+
+    // Use test mechanism fixed_ica_current, and a derived mechanism for sodium, to
+    // write to specific ion currents.
+
+    auto cat = make_unit_test_catalogue();
+    cat.derive("fixed_ina_current", "fixed_ica_current", {}, {{"ca", "na"}});
+
+    cable_cell cells[2];
+
+    // Simple constant diameter cable, 3 CVs.
+
+    cells[0] = cable_cell(sample_tree({msample{{0., 0., 0., 1.}, 0}, msample{{100., 0., 0., 1.}, 0}}, {mnpos, 0u}));
+    cells[0].default_parameters.discretization = cv_policy_fixed_per_branch(3);
+
+    // Calcium ions everywhere, half with current density jca0, half with jca1.
+    // Sodium ions only on distal half, with current densitry jna1.
+
+    const double jca0 = 1.5; // [A/m²]
+    const double jca1 = 2.0;
+    const double jna1 = 2.5;
+
+    // Scaling factor 0.1 is to convert our current densities in [A/m²] to NMODL units [mA/cm²].
+
+    cells[0].paint(mcable{0, 0., 0.5}, mechanism_desc("fixed_ica_current").set("current_density", 0.1*jca0));
+    cells[0].paint(mcable{0, 0.5, 1.}, mechanism_desc("fixed_ica_current").set("current_density", 0.1*jca1));
+    cells[0].paint(mcable{0, 0.5, 1.}, mechanism_desc("fixed_ina_current").set("current_density", 0.1*jna1));
+// DEBUG
+//cells[0].paint(mcable{0, 0, 0.5}, mechanism_desc("fixed_ina_current").set("current_density", 0.));
+
+    // Make a second cable cell, with same layout but 3 times the current.
+
+    cells[1] = cable_cell(sample_tree({msample{{0., 0., 0., 1.}, 0}, msample{{100., 0., 0., 1.}, 0}}, {mnpos, 0u}));
+    cells[1].default_parameters.discretization = cv_policy_fixed_per_branch(3);
+
+    cells[1].paint(mcable{0, 0., 0.5}, mechanism_desc("fixed_ica_current").set("current_density", 0.3*jca0));
+    cells[1].paint(mcable{0, 0.5, 1.}, mechanism_desc("fixed_ica_current").set("current_density", 0.3*jca1));
+    cells[1].paint(mcable{0, 0.5, 1.}, mechanism_desc("fixed_ina_current").set("current_density", 0.3*jna1));
+
+    // Place probes in each CV on cell 0, plus one in the last CV on cell 1.
+
+    mlocation loc0{0, 0.1};
+    mlocation loc1{0, 0.5};
+    mlocation loc2{0, 0.9};
+
+    cable1d_recipe rec(cells);
+    rec.catalogue() = cat;
+
+    // Probe (0, 0): ica on CV 0.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc0, "ca"});
+    // Probe (0, 1): ica on CV 1.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc1, "ca"});
+    // Probe (0, 2): ica on CV 2.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc2, "ca"});
+
+    // Probe (0, 3): ina on CV 0.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc0, "na"});
+    // Probe (0, 4): ina on CV 1.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc1, "na"});
+    // Probe (0, 5): ina on CV 2.
+    rec.add_probe(0, 0, cell_probe_ion_current_density{loc2, "na"});
+
+    // Probe (0, 6): total ion current density on CV 0.
+    rec.add_probe(0, 0, cell_probe_total_ionic_current_density{loc0});
+    // Probe (0, 7): total ion current density on CV 1.
+    rec.add_probe(0, 0, cell_probe_total_ionic_current_density{loc1});
+    // Probe (0, 8): total ion current density on CV 2.
+    rec.add_probe(0, 0, cell_probe_total_ionic_current_density{loc2});
+
+    // Probe (1, 0): ica on CV 5 (CV 2 of cell 1).
+    rec.add_probe(1, 0, cell_probe_ion_current_density{loc2, "ca"});
+    // Probe (1, 1): total ion current density on CV 5 (CV 2 of cell 1).
+    rec.add_probe(1, 0, cell_probe_total_ionic_current_density{loc2});
+
+    std::vector<target_handle> targets;
+    std::vector<fvm_index_type> cell_to_intdom;
+    probe_association_map<probe_handle> probe_map;
+
+    fvm_cell lcell(*ctx);
+    lcell.initialize({0, 1}, rec, cell_to_intdom, targets, probe_map);
+
+    // Should be no sodium ion instantiated on CV 0, so probe (0, 3) should
+    // have been silently discared.
+
+    EXPECT_EQ(9u, rec.num_probes(0));
+    EXPECT_EQ(2u, rec.num_probes(1));
+    EXPECT_EQ(10u, probe_map.size());
+
+    probe_handle ica_cv0 = probe_map.at({0, 0}).handle;
+    probe_handle ica_cv1 = probe_map.at({0, 1}).handle;
+    probe_handle ica_cv2 = probe_map.at({0, 2}).handle;
+    EXPECT_EQ(0u, probe_map.count({0, 3}));
+    probe_handle ina_cv1 = probe_map.at({0, 4}).handle;
+    probe_handle ina_cv2 = probe_map.at({0, 5}).handle;
+    probe_handle i_cv0 = probe_map.at({0, 6}).handle;
+    probe_handle i_cv1 = probe_map.at({0, 7}).handle;
+    probe_handle i_cv2 = probe_map.at({0, 8}).handle;
+
+    probe_handle ica_cv5 = probe_map.at({1, 0}).handle;
+    probe_handle i_cv5 = probe_map.at({1, 1}).handle;
+
+    // Integrate cell for a bit, and check that currents add up as we expect.
+
+    lcell.integrate(0.01, 0.0025, {}, {});
+
+    EXPECT_DOUBLE_EQ(jca0, deref(ica_cv0));
+    EXPECT_DOUBLE_EQ((jca0+jca1)/2, deref(ica_cv1));
+    EXPECT_DOUBLE_EQ(jca1, deref(ica_cv2));
+
+    EXPECT_DOUBLE_EQ(jna1/2, deref(ina_cv1));
+    EXPECT_DOUBLE_EQ(jna1, deref(ina_cv2));
+
+    EXPECT_DOUBLE_EQ(jca0, deref(i_cv0));
+    EXPECT_DOUBLE_EQ(jna1/2+jca0/2+jca1/2, deref(i_cv1));
+    EXPECT_DOUBLE_EQ(jna1+jca1, deref(i_cv2));
+
+    // Currents on cell 1 should be 3 times those on cell 0.
+
+    EXPECT_DOUBLE_EQ(jca1*3, deref(ica_cv5));
+    EXPECT_DOUBLE_EQ((jna1+jca1)*3, deref(i_cv5));
+}
+
 TEST(probe, multicore_v_i) {
     context ctx = make_context();
     run_v_i_probe_test<multicore::backend>(ctx);
@@ -334,6 +459,11 @@ TEST(probe, multicore_expsyn_g) {
 TEST(probe, multicore_ion_conc) {
     context ctx = make_context();
     run_ion_density_probe_test<multicore::backend>(ctx);
+}
+
+TEST(probe, multicore_ion_currents) {
+    context ctx = make_context();
+    run_ion_current_probe_test<multicore::backend>(ctx);
 }
 
 #ifdef ARB_GPU_ENABLED
@@ -361,5 +491,11 @@ TEST(probe, multicore_ion_conc) {
     }
 }
 
+TEST(probe, multicore_ion_currents) {
+    context ctx = make_context(proc_allocation{1, arbenv::default_gpu()});
+    if (has_gpu(ctx)) {
+        run_ion_current_probe_test<gpu::backend>(ctx);
+    }
+}
 #endif
 
