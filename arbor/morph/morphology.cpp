@@ -432,35 +432,9 @@ bool mextent::intersects(const mcable_list& a) const {
 }
 
 mextent intersect(const mextent& a, const mextent& b) {
-    auto precedes = [](mcable x, mcable y) {
-        return x.branch<y.branch || (x.branch==y.branch && x.dist_pos<y.prox_pos);
-    };
-
     mextent m;
-    auto ai = a.cables().begin();
-    auto ae = a.cables().end();
-    auto bi = b.cables().begin();
-    auto be = b.cables().end();
+    m.cables_ = intersect(a.cables(), b.cables());
 
-    while (ai!=ae && bi!=be) {
-        if (precedes(*ai, *bi)) {
-            ++ai;
-        }
-        else if (precedes(*bi, *ai)) {
-            ++bi;
-        }
-        else {
-            m.cables_.push_back(mcable{ai->branch,
-                std::max(ai->prox_pos, bi->prox_pos),
-                std::min(ai->dist_pos, bi->dist_pos)});
-            if (ai->dist_pos<bi->dist_pos) {
-                ++ai;
-            }
-            else {
-                ++bi;
-            }
-        }
-    }
     return m;
 }
 

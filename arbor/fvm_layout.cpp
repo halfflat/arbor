@@ -483,34 +483,50 @@ struct voltage_reference_pair {
     voltage_reference distal;
 };
 
-voltage_reference_pair fvm_voltage_reference_points(const cv_geometry& geom, fvm_size_type cell_idx, mlocation site) {
+voltage_reference_pair fvm_voltage_reference_points(const morphology& morph, const cv_geometry& geom, fvm_size_type cell_idx, mlocation site) {
     voltage_reference site_ref, parent_ref, child_ref;
     bool check_parent = true, check_child = true;
     msize_t bid = site.branch;
 
     // 'Simple' CVs contain no fork points, and are represented by a single cable.
     auto cv_simple = [&geom](auto cv) { return geom.cables(cv).size()==1u; };
+
     auto cv_midpoint = [&geom](auto cv) {
         // Under assumption that CV is simple:
         mcable c = geom.cables(cv).front();
         return mlocation{c.branch, (c.prox_pos+c.dist_pos)/2};
     };
-    auto cv_contains = [&geom](auto cv, mlocation x) {
-        return util::any_of(geom.cables(cv), [x](mcable c) {
-                    return c.branch==x.branch && c.prox_pos<=x.pos && c.dist_pos>=x.pos; 
-                });
+
+    auto cover = [&morph](mlocation x) {
+        return mextent(morph, {{x.branch, x.pos, x.pos}}).cables();
+    };
+
+    auto cv_contains_fork = [&](auto cv, mlocation x) {
+        // CV contains fork if it intersects any branch in the cover
+        // of the location x other than the branch of x itself.
+
+        auto cables = geom.cables(cv);
+        if (cables.size()<2) return false;
+
+        mcable_list intersection =
+            intersect(cover(x), mcable_list(cables.begin(), cables.end()));
+
+        return util::any_of(intersection, [x](mcable c) { return c.branch!=x.branch; });
     };
 
     site_ref.cv = geom.location_cv(cell_idx, site, cv_prefer::cv_empty);
     if (cv_simple(site_ref.cv)) {
         site_ref.loc = cv_midpoint(site_ref.cv);
     }
-    else if (cv_contains(site_ref.cv, mlocation{bid, 0})) {
+    else if (cv_contains_fork(site_ref.cv, mlocation{bid, 0})) {
         site_ref.loc = mlocation{bid, 0};
         check_parent = false;
     }
     else {
-        arb_assert(cv_contains(site_ref.cv, mlocation{bid, 1}));
+        // CV not simple, and without head of branch as fork point, must contain
+        // tail of branch as a fork point.
+        arb_assert(cv_contains_fork(site_ref.cv, mlocation{bid, 1}));
+
         site_ref.loc = mlocation{bid, 1};
         check_child = false;
     }
@@ -524,9 +540,12 @@ voltage_reference_pair fvm_voltage_reference_points(const cv_geometry& geom, fvm
     }
 
     if (check_child) {
-        arb_assert(geom.children(site_ref.cv).size()<=1);
-        if (!geom.children(site_ref.cv).empty()) {
-            child_ref.cv = geom.children(site_ref.cv).front();
+        for (auto child_cv: geom.children(site_ref.cv)) {
+            mcable child_prox_cable = geom.cables(child_cv).front();
+            if (child_prox_cable.branch==bid) {
+                child_ref.cv = child_cv;
+                break;
+            }
         }
     }
     if (child_ref.cv!=-1) {
@@ -565,7 +584,7 @@ fvm_voltage_interpolant fvm_interpolate_voltage(const cable_cell& cell, const fv
     auto& embedding = cell.embedding();
     fvm_voltage_interpolant vi;
 
-    auto vrefs = fvm_voltage_reference_points(D.geometry, cell_idx, site);
+    auto vrefs = fvm_voltage_reference_points(cell.morphology(), D.geometry, cell_idx, site);
     vi.proximal_cv = vrefs.proximal.cv;
     vi.distal_cv = vrefs.distal.cv;
 
@@ -606,7 +625,7 @@ fvm_voltage_interpolant fvm_axial_current(const cable_cell& cell, const fvm_cv_d
     auto& embedding = cell.embedding();
     fvm_voltage_interpolant vi;
 
-    auto vrefs = fvm_voltage_reference_points(D.geometry, cell_idx, site);
+    auto vrefs = fvm_voltage_reference_points(cell.morphology(), D.geometry, cell_idx, site);
     vi.proximal_cv = vrefs.proximal.cv;
     vi.distal_cv = vrefs.distal.cv;
 

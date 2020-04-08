@@ -97,8 +97,13 @@ struct mcable {
     double prox_pos; // ∈ [0,1]
     double dist_pos; // ∈ [0,1]
 
-    friend mlocation prox_loc(const mcable&);
-    friend mlocation dist_loc(const mcable&);
+    friend mlocation prox_loc(const mcable& c) {
+        return {c.branch, c.prox_pos};
+    }
+
+    friend mlocation dist_loc(const mcable& c) {
+        return {c.branch, c.dist_pos};
+    }
 
     // branch ≠ npos, and 0 ≤ prox_pos ≤ dist_pos ≤ 1
     friend bool test_invariants(const mcable&);
@@ -107,11 +112,16 @@ struct mcable {
 
 ARB_DEFINE_LEXICOGRAPHIC_ORDERING(mcable, (a.branch,a.prox_pos,a.dist_pos), (b.branch,b.prox_pos,b.dist_pos));
 
+// While mcable_list is an alias for a vector of mcable, a value of
+// explicitedly typed as mcable_list is assumed to be sorted.
 using mcable_list = std::vector<mcable>;
 std::ostream& operator<<(std::ostream& o, const mcable_list& c);
+
 // Tests whether each cable in the list satisfies the invariants for a cable,
 // and that the cables in the vector are ordered.
 bool test_invariants(const mcable_list&);
+
+mcable_list intersect(const mcable_list&, const mcable_list&);
 
 using point_prop = std::uint8_t;
 enum point_prop_mask: point_prop {

@@ -1,3 +1,4 @@
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -13,7 +14,6 @@
 #include "io/sepval.hpp"
 
 #include "common.hpp"
-#include "common_morphologies.hpp"
 #include "unit_test_catalogue.hpp"
 #include "../common_cells.hpp"
 
@@ -760,14 +760,14 @@ TEST(fvm_layout, vinterp_cable) {
     // interpolate between that and the next; every site in the distal CV
     // should interpolate between that and the parent.
 
-    // Cable cell with just one branch, non-spherical.
-    cable_cell cell(common_morphology::m_reg_b1);
-    cell.default_parameters.discretization = cv_policy_fixed_per_branch(5);
-
-    fvm_cv_discretization D = fvm_cv_discretize(cell, neuron_parameter_defaults);
+    // Cable cell with just one branch, non-spherical root.
+    morphology morph(sample_tree({msample{0., 0., 0., 1.}, msample{10., 0., 0., 1.}}, {mnpos, 0u}));
+    cable_cell cell(morph);
 
     // CV midpoints at branch pos 0.1, 0.3, 0.5, 0.7, 0.9.
     // Expect voltage reference locations to be CV modpoints.
+    cell.default_parameters.discretization = cv_policy_fixed_per_branch(5);
+    fvm_cv_discretization D = fvm_cv_discretize(cell, neuron_parameter_defaults);
 
     // Test locations, either side of CV midpoints plus extrema, CV boundaries.
     double site_pos[] = { 0., 0.03, 0.11, 0.2, 0.28, 0.33, 0.4, 0.46, 0.55, 0.6, 0.75, 0.8, 0.83, 0.95, 1.};
@@ -794,5 +794,71 @@ TEST(fvm_layout, vinterp_cable) {
 
         EXPECT_EQ(expected_proximal, I.proximal_cv);
         EXPECT_EQ(expected_distal, I.distal_cv);
+
+        // Cable has constant diameter, so interpolation coefficients should
+        // be simple linear functions of branch position.
+
+        double prox_refpos = I.proximal_cv*0.2+0.1;
+        double dist_refpos = I.distal_cv*0.2+0.1;
+
+        // (Tortuous fp manipulation along the way makes the error greater than 4 ulp).
+        const double relerr = 32*std::numeric_limits<double>::epsilon();
+
+        EXPECT_TRUE(testing::near_relative((dist_refpos-pos)/0.2, I.proximal_coef, relerr));
+        EXPECT_TRUE(testing::near_relative((pos-prox_refpos)/0.2, I.distal_coef, relerr));
     }
 }
+
+TEST(fvm_layout, vinterp_forked) {
+    // If a CV contains points at both ends of a branch, there will be
+    // no other adjacent CV on the same branch that we can use for
+    // interpolation.
+
+    // Cable cell with three branchses; branches 0 has child branches 1 and 2.
+    morphology morph(sample_tree(
+            {{0., 0., 0., 1.}, {10., 0., 0., 1}, {10., 20., 0., 1}, {10., -20., 0., 1}},
+            {mnpos, 0u, 1u, 1u}));
+    cable_cell cell(morph);
+
+    // CV 0 contains branch 0 and the fork point; CV 1 and CV 2 have CV 0 as parent,
+    // and contain branches 1 and 2 respectively, excluding the fork point.
+    mlocation_list cv_ends{{1, 0.}, {2, 0.}};
+    cell.default_parameters.discretization = cv_policy_explicit(cv_ends);
+    fvm_cv_discretization D = fvm_cv_discretize(cell, neuron_parameter_defaults);
+
+    // Points in branch 0 should only get CV 0 for interpolation.
+    {
+        fvm_voltage_interpolant I = fvm_interpolate_voltage(cell, D, 0, mlocation{0, 0.3});
+        EXPECT_EQ(0, I.proximal_cv);
+        EXPECT_EQ(0, I.distal_cv);
+        EXPECT_EQ(1, I.proximal_coef+I.distal_coef);
+    }
+    // Points in branches 1 and 2 should get CV 0 and CV 1 or 2 respectively.
+    {
+        fvm_voltage_interpolant I = fvm_interpolate_voltage(cell, D, 0, mlocation{1, 0});
+        EXPECT_EQ(0, I.proximal_cv);
+        EXPECT_EQ(1., I.proximal_coef);
+        EXPECT_EQ(1, I.distal_cv);
+        EXPECT_EQ(0., I.distal_coef);
+
+        // Past the midpoint, we're extrapolating.
+        I = fvm_interpolate_voltage(cell, D, 0, mlocation{1, 0.7});
+        EXPECT_EQ(0, I.proximal_cv);
+        EXPECT_LT(I.proximal_coef, 0.);
+        EXPECT_EQ(1, I.distal_cv);
+        EXPECT_GT(I.distal_coef, 1.);
+
+        I = fvm_interpolate_voltage(cell, D, 0, mlocation{2, 0});
+        EXPECT_EQ(0, I.proximal_cv);
+        EXPECT_EQ(1., I.proximal_coef);
+        EXPECT_EQ(2, I.distal_cv);
+        EXPECT_EQ(0., I.distal_coef);
+
+        I = fvm_interpolate_voltage(cell, D, 0, mlocation{2, 0.7});
+        EXPECT_EQ(0, I.proximal_cv);
+        EXPECT_LT(I.proximal_coef, 0.);
+        EXPECT_EQ(2, I.distal_cv);
+        EXPECT_GT(I.distal_coef, 1.);
+    }
+}
+

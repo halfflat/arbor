@@ -129,17 +129,43 @@ bool test_invariants(const mcable& c) {
     return (0.<=c.prox_pos && c.prox_pos<=c.dist_pos && c.dist_pos<=1.) && c.branch!=mnpos;
 }
 
-mlocation prox_loc(const mcable& c) {
-    return {c.branch, c.prox_pos};
-}
-
-mlocation dist_loc(const mcable& c) {
-    return {c.branch, c.dist_pos};
-}
-
 bool test_invariants(const mcable_list& l) {
     return std::is_sorted(l.begin(), l.end())
         && l.end()==std::find_if(l.begin(), l.end(), [](const mcable& c) {return !test_invariants(c);});
+}
+
+mcable_list intersect(const mcable_list& a, const mcable_list& b) {
+    auto precedes = [](mcable x, mcable y) {
+        return x.branch<y.branch || (x.branch==y.branch && x.dist_pos<y.prox_pos);
+    };
+
+    mcable_list result;
+    auto ai = a.begin();
+    auto ae = a.end();
+    auto bi = b.begin();
+    auto be = b.end();
+
+    while (ai!=ae && bi!=be) {
+        if (precedes(*ai, *bi)) {
+            ++ai;
+        }
+        else if (precedes(*bi, *ai)) {
+            ++bi;
+        }
+        else {
+            result.push_back(mcable{ai->branch,
+                std::max(ai->prox_pos, bi->prox_pos),
+                std::min(ai->dist_pos, bi->dist_pos)});
+            if (ai->dist_pos<bi->dist_pos) {
+                ++ai;
+            }
+            else {
+                ++bi;
+            }
+        }
+    }
+    return result;
+
 }
 
 std::ostream& operator<<(std::ostream& o, const mpoint& p) {
