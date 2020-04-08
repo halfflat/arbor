@@ -13,6 +13,7 @@
 #include "io/sepval.hpp"
 
 #include "common.hpp"
+#include "common_morphologies.hpp"
 #include "unit_test_catalogue.hpp"
 #include "../common_cells.hpp"
 
@@ -751,4 +752,47 @@ TEST(fvm_layout, revpot) {
     auto soma1_index = D.geometry.cell_cv_divs[1];
     ASSERT_EQ(1u, M.mechanisms.count(write_eb_ec.name()));
     EXPECT_EQ((std::vector<fvm_index_type>(1, soma1_index)), M.mechanisms.at(write_eb_ec.name()).cv);
+}
+
+TEST(fvm_layout, vinterp_cable) {
+    // On a simple cable, expect CVs used forinterpolation to change at
+    // the midpoints of interior CVs. Every site in the proximal CV should
+    // interpolate between that and the next; every site in the distal CV
+    // should interpolate between that and the parent.
+
+    // Cable cell with just one branch, non-spherical.
+    cable_cell cell(common_morphology::m_reg_b1);
+    cell.default_parameters.discretization = cv_policy_fixed_per_branch(5);
+
+    fvm_cv_discretization D = fvm_cv_discretize(cell, neuron_parameter_defaults);
+
+    // CV midpoints at branch pos 0.1, 0.3, 0.5, 0.7, 0.9.
+    // Expect voltage reference locations to be CV modpoints.
+
+    // Test locations, either side of CV midpoints plus extrema, CV boundaries.
+    double site_pos[] = { 0., 0.03, 0.11, 0.2, 0.28, 0.33, 0.4, 0.46, 0.55, 0.6, 0.75, 0.8, 0.83, 0.95, 1.};
+
+    for (auto pos: site_pos) {
+        mlocation site{0, pos};
+
+        fvm_index_type expected_distal;
+        if (pos<0.3) {
+            expected_distal = 1;
+        }
+        else if (pos<0.5) {
+            expected_distal = 2;
+        }
+        else if (pos<0.7) {
+            expected_distal = 3;
+        }
+        else {
+            expected_distal = 4;
+        }
+        fvm_index_type expected_proximal = expected_distal-1;
+
+        fvm_voltage_interpolant I = fvm_interpolate_voltage(cell, D, 0, site);
+
+        EXPECT_EQ(expected_proximal, I.proximal_cv);
+        EXPECT_EQ(expected_distal, I.distal_cv);
+    }
 }
