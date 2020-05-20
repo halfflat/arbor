@@ -424,14 +424,21 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
 
     // Sort exact sampling events into staged events for delivery.
     if (exact_sampling_events.size()) {
-        util::stable_sort_by(exact_sampling_events, [](const auto& ev) { return event_index(ev); });
+        auto event_less =
+            [](const auto& a, const auto& b) {
+                 auto ai = event_index(a);
+                 auto bi = event_index(b);
+                 return ai<bi || (ai==bi && event_time(a)<event_time(b));
+            };
+
+        util::sort(exact_sampling_events, event_less);
 
         std::vector<deliverable_event> merged;
         merged.reserve(staged_events_.size()+exact_sampling_events.size());
 
         std::merge(staged_events_.begin(), staged_events_.end(),
                    exact_sampling_events.begin(), exact_sampling_events.end(),
-                   std::back_inserter(merged));
+                   std::back_inserter(merged), event_less);
         std::swap(merged, staged_events_);
     }
 
