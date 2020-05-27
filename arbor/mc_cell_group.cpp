@@ -43,9 +43,7 @@ mc_cell_group::mc_cell_group(const std::vector<cell_gid_type>& gids, const recip
             util::transform_view(gids_, [&rec](cell_gid_type i) { return rec.num_targets(i); }));
     std::size_t n_targets = target_handle_divisions_.back();
 
-    // Pre-allocate space to store handles, probe map.
-    auto n_probes = util::sum_by(gids_, [&rec](cell_gid_type i) { return rec.num_probes(i); });
-    probe_map_.reserve(n_probes);
+    // Pre-allocate space to store handles.
     target_handles_.reserve(n_targets);
 
     // Construct cell implementation, retrieving handles and maps. 
@@ -86,6 +84,7 @@ struct sampler_call_info {
     sampler_function sampler;
     cell_member_type probe_id;
     probe_tag tag;
+    const fvm_probe_data* pdata_ptr;
 
     // Offsets are into lowered cell sample time and event arrays.
     sample_size_type begin_offset;
@@ -112,7 +111,7 @@ void run_samples(
     std::vector<sample_record>&,
     fvm_probe_scratch&)
 {
-    throw arbor_internal_error("invalid fvm_probe_info in sampler map");
+    throw arbor_internal_error("invalid fvm_probe_data in sampler map");
 }
 
 void run_samples(
@@ -309,14 +308,13 @@ void run_samples(
 
 // Generic run_samples dispatches on probe info variant type.
 void run_samples(
-    const fvm_probe_info& p,
     const sampler_call_info& sc,
     const fvm_value_type* raw_times,
     const fvm_value_type* raw_samples,
     std::vector<sample_record>& sample_records,
     fvm_probe_scratch& scratch)
 {
-    util::visit([&](auto& x) {run_samples(x, sc, raw_times, raw_samples, sample_records, scratch); }, p.info);
+    util::visit([&](auto& x) {run_samples(x, sc, raw_times, raw_samples, sample_records, scratch); }, sc.pdata_ptr->info);
 }
 
 void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& event_lanes) {
@@ -400,15 +398,16 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
 
         for (cell_member_type pid: sa.probe_ids) {
             auto cell_index = gid_index_map_.at(pid.gid);
-            auto p = probe_map_[pid];
-            sample_size_type n_raw = p.handle.n_raw();
 
-            call_info.push_back({sa.sampler, pid, p.tag, n_samples, n_samples+n_times*n_raw});
+            probe_tag tag = probe_map_.tag.at(pid);
+            for (const fvm_probe_data& pdata: probe_map_.data_on(pid)) {
+                call_info.push_back({sa.sampler, pid, tag, &pdata, n_samples, n_samples + n_times*pdata.n_raw()});
 
-            for (auto t: sample_times) {
-                for (probe_handle h: p.handle.raw_handle_range()) {
-                    sample_event ev{t, (cell_gid_type)cell_to_intdom_[cell_index], {h, n_samples++}};
-                    sample_events.push_back(ev);
+                for (auto t: sample_times) {
+                    for (probe_handle h: pdata.raw_handle_range()) {
+                        sample_event ev{t, (cell_gid_type)cell_to_intdom_[cell_index], {h, n_samples++}};
+                        sample_events.push_back(ev);
+                    }
                 }
             }
         }
@@ -435,8 +434,7 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
     reserve_scratch(scratch, max_samples_per_call);
 
     for (auto& sc: call_info) {
-        run_samples(probe_map_[sc.probe_id].handle, sc, result.sample_time.data(), result.sample_value.data(),
-            sample_records, scratch);
+        run_samples(sc, result.sample_time.data(), result.sample_value.data(), sample_records, scratch);
     }
     PL();
 
@@ -454,7 +452,7 @@ void mc_cell_group::add_sampler(sampler_association_handle h, cell_member_predic
                                 schedule sched, sampler_function fn, sampling_policy policy)
 {
     std::vector<cell_member_type> probeset =
-        util::assign_from(util::filter(util::keys(probe_map_), probe_ids));
+        util::assign_from(util::filter(util::keys(probe_map_.tag), probe_ids));
 
     if (!probeset.empty()) {
         sampler_map_.add(h, sampler_association{std::move(sched), std::move(fn), std::move(probeset)});

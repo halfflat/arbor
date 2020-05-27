@@ -111,35 +111,35 @@ void run_v_i_probe_test(const context& ctx) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<fvm_probe_info> probe_map;
+    probe_association_map probe_map;
 
     fvm_cell lcell(*ctx);
     lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
 
-    EXPECT_EQ(3u, rec.num_probes(0));
+    EXPECT_EQ(3u, rec.get_probes(0).size());
     EXPECT_EQ(3u, probe_map.size());
 
-    EXPECT_EQ(10, probe_map.at({0, 0}).tag);
-    EXPECT_EQ(20, probe_map.at({0, 1}).tag);
-    EXPECT_EQ(30, probe_map.at({0, 2}).tag);
+    EXPECT_EQ(10, probe_map.tag.at({0, 0}));
+    EXPECT_EQ(20, probe_map.tag.at({0, 1}));
+    EXPECT_EQ(30, probe_map.tag.at({0, 2}));
 
-    auto get_probe_handle = [&](cell_member_type x, unsigned i = 0) {
-        return probe_map.at(x).handle.raw_handle_range()[i];
+    auto get_probe_raw_handle = [&](cell_member_type x, unsigned i = 0) {
+        return probe_map.data_on(x).front().raw_handle_range()[i];
     };
 
     // Voltage probes are interpolated, so expect fvm_probe_info
     // to wrap an fvm_probe_interpolated; ion current density is
     // a scalar, so should wrap fvm_probe_scalar.
 
-    ASSERT_TRUE(util::get_if<fvm_probe_interpolated>(probe_map.at({0, 0}).handle.info));
-    ASSERT_TRUE(util::get_if<fvm_probe_interpolated>(probe_map.at({0, 1}).handle.info));
-    ASSERT_TRUE(util::get_if<fvm_probe_scalar>(probe_map.at({0, 2}).handle.info));
+    ASSERT_TRUE(util::get_if<fvm_probe_interpolated>(probe_map.data_on({0, 0}).front().info));
+    ASSERT_TRUE(util::get_if<fvm_probe_interpolated>(probe_map.data_on({0, 0}).front().info));
+    ASSERT_TRUE(util::get_if<fvm_probe_scalar>(probe_map.data_on({0, 2}).front().info));
 
-    probe_handle p0a = get_probe_handle({0, 0}, 0);
-    probe_handle p0b = get_probe_handle({0, 0}, 1);
-    probe_handle p1a = get_probe_handle({0, 1}, 0);
-    probe_handle p1b = get_probe_handle({0, 1}, 1);
-    probe_handle p2 = get_probe_handle({0, 2});
+    probe_handle p0a = get_probe_raw_handle({0, 0}, 0);
+    probe_handle p0b = get_probe_raw_handle({0, 0}, 1);
+    probe_handle p1a = get_probe_raw_handle({0, 1}, 0);
+    probe_handle p1b = get_probe_raw_handle({0, 1}, 1);
+    probe_handle p2 = get_probe_raw_handle({0, 2});
 
     // Ball-and-stick cell with default discretization policy should
     // have three CVs, one for branch 0, one trivial one covering the
@@ -207,14 +207,14 @@ void run_v_cable_probe_test(const context& ctx) {
 
         std::vector<target_handle> targets;
         std::vector<fvm_index_type> cell_to_intdom;
-        probe_association_map<fvm_probe_info> probe_map;
+        probe_association_map probe_map;
 
         fvm_cell lcell(*ctx);
         lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
 
         ASSERT_EQ(1u, probe_map.size());
 
-        const fvm_probe_multi* h_ptr = util::get_if<fvm_probe_multi>(probe_map.at({0, 0}).handle.info);
+        const fvm_probe_multi* h_ptr = util::get_if<fvm_probe_multi>(probe_map.data_on({0, 0}).front().info);
         ASSERT_TRUE(h_ptr);
         auto& h = *h_ptr;
 
@@ -268,25 +268,25 @@ void run_expsyn_g_probe_test(const context& ctx, bool coalesce_synapses = false)
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<fvm_probe_info> probe_map;
+    probe_association_map probe_map;
 
     fvm_cell lcell(*ctx);
     lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
 
-    EXPECT_EQ(2u, rec.num_probes(0));
+    EXPECT_EQ(2u, rec.get_probes(0).size());
     EXPECT_EQ(2u, probe_map.size());
-    ASSERT_EQ(1u, probe_map.count({0, 0}));
-    ASSERT_EQ(1u, probe_map.count({0, 1}));
+    ASSERT_EQ(1u, probe_map.data.count({0, 0}));
+    ASSERT_EQ(1u, probe_map.data.count({0, 1}));
 
-    EXPECT_EQ(10, probe_map.at({0, 0}).tag);
-    EXPECT_EQ(20, probe_map.at({0, 1}).tag);
+    EXPECT_EQ(10, probe_map.tag.at({0, 0}));
+    EXPECT_EQ(20, probe_map.tag.at({0, 1}));
 
-    auto probe_scalar_handle = [&](cell_member_type x) {
-        return probe_map.at(x).handle.raw_handle_range()[0];
+    auto get_probe_raw_handle = [&](cell_member_type x, unsigned i = 0) {
+        return probe_map.data_on(x).front().raw_handle_range()[i];
     };
 
-    probe_handle p0 = probe_scalar_handle({0, 0});
-    probe_handle p1 = probe_scalar_handle({0, 1});
+    probe_handle p0 = get_probe_raw_handle({0, 0});
+    probe_handle p1 = get_probe_raw_handle({0, 1});
 
     // Expect initial probe values to be intial synapse g == 0.
 
@@ -369,7 +369,7 @@ void run_expsyn_g_cable_probe_test(const context& ctx, bool coalesce_synapses = 
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<fvm_probe_info> probe_map;
+    probe_association_map probe_map;
 
     fvm_cell lcell(*ctx);
     lcell.initialize({0, 1}, rec, cell_to_intdom, targets, probe_map);
@@ -396,7 +396,7 @@ void run_expsyn_g_cable_probe_test(const context& ctx, bool coalesce_synapses = 
 
     ASSERT_EQ(2u, probe_map.size());
     for (unsigned i: {0u, 1u}) {
-        const auto* h_ptr = util::get_if<fvm_probe_multi>(probe_map.at({i, 0}).handle.info);
+        const auto* h_ptr = util::get_if<fvm_probe_multi>(probe_map.data_on({i, 0}).front().info);
         ASSERT_TRUE(h_ptr);
 
         const auto* m_ptr = util::get_if<std::vector<cable_probe_point_info>>(h_ptr->metadata);
@@ -515,7 +515,7 @@ void run_ion_density_probe_test(const context& ctx) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<fvm_probe_info> probe_map;
+    probe_association_map probe_map;
 
     fvm_cell lcell(*ctx);
     lcell.initialize({0}, rec, cell_to_intdom, targets, probe_map);
@@ -525,24 +525,24 @@ void run_ion_density_probe_test(const context& ctx) {
     // CV 0, and so probe (0, 8) should have been discarded. All other probes
     // should be in the map.
 
-    EXPECT_EQ(13u, rec.num_probes(0));
+    EXPECT_EQ(13u, rec.get_probes(0).size());
     EXPECT_EQ(11u, probe_map.size());
 
-    auto probe_scalar_handle = [&](cell_member_type x) {
-        return util::get<fvm_probe_scalar>(probe_map.at(x).handle.info).raw_handles[0];
+    auto get_probe_raw_handle = [&](cell_member_type x, unsigned i = 0) {
+        return probe_map.data_on(x).front().raw_handle_range()[i];
     };
 
-    probe_handle ca_int_cv0 = probe_scalar_handle({0, 0});
-    probe_handle ca_int_cv1 = probe_scalar_handle({0, 1});
-    probe_handle ca_int_cv2 = probe_scalar_handle({0, 2});
-    probe_handle ca_ext_cv0 = probe_scalar_handle({0, 3});
-    probe_handle ca_ext_cv1 = probe_scalar_handle({0, 4});
-    probe_handle ca_ext_cv2 = probe_scalar_handle({0, 5});
-    EXPECT_EQ(0u, probe_map.count({0, 6}));
-    probe_handle na_int_cv2 = probe_scalar_handle({0, 7});
-    EXPECT_EQ(0u, probe_map.count({0, 8}));
-    probe_handle write_ca2_s_cv1 = probe_scalar_handle({0, 9});
-    probe_handle write_ca2_s_cv2 = probe_scalar_handle({0, 10});
+    probe_handle ca_int_cv0 = get_probe_raw_handle({0, 0});
+    probe_handle ca_int_cv1 = get_probe_raw_handle({0, 1});
+    probe_handle ca_int_cv2 = get_probe_raw_handle({0, 2});
+    probe_handle ca_ext_cv0 = get_probe_raw_handle({0, 3});
+    probe_handle ca_ext_cv1 = get_probe_raw_handle({0, 4});
+    probe_handle ca_ext_cv2 = get_probe_raw_handle({0, 5});
+    EXPECT_EQ(0u, probe_map.data.count({0, 6}));
+    probe_handle na_int_cv2 = get_probe_raw_handle({0, 7});
+    EXPECT_EQ(0u, probe_map.data.count({0, 8}));
+    probe_handle write_ca2_s_cv1 = get_probe_raw_handle({0, 9});
+    probe_handle write_ca2_s_cv2 = get_probe_raw_handle({0, 10});
 
     // Ion concentrations should have been written in initialization.
     // For CV 1, calcium concentration should be mean of the two values
@@ -574,9 +574,9 @@ void run_ion_density_probe_test(const context& ctx) {
     // sorted by CV in the fvm_probe_weighted_multi object; this is assumed
     // below.
 
-    auto* p_ptr = util::get_if<fvm_probe_multi>(probe_map.at({0, 11}).handle.info);
+    auto* p_ptr = util::get_if<fvm_probe_multi>(probe_map.data_on({0, 11}).front().info);
     ASSERT_TRUE(p_ptr);
-    fvm_probe_multi& na_int_all_info = *p_ptr;
+    const fvm_probe_multi& na_int_all_info = *p_ptr;
 
     auto* m_ptr = util::get_if<mcable_list>(na_int_all_info.metadata);
     ASSERT_TRUE(m_ptr);
@@ -592,9 +592,9 @@ void run_ion_density_probe_test(const context& ctx) {
     EXPECT_EQ(na_int_cv2,   na_int_all_info.raw_handles[1]);
     EXPECT_EQ(na_int_cv2-1, na_int_all_info.raw_handles[0]);
 
-    p_ptr = util::get_if<fvm_probe_multi>(probe_map.at({0, 12}).handle.info);
+    p_ptr = util::get_if<fvm_probe_multi>(probe_map.data_on({0, 12}).front().info);
     ASSERT_TRUE(p_ptr);
-    fvm_probe_multi& ca_ext_all_info = *p_ptr;
+    const fvm_probe_multi& ca_ext_all_info = *p_ptr;
 
     m_ptr = util::get_if<mcable_list>(ca_ext_all_info.metadata);
     ASSERT_TRUE(m_ptr);
@@ -691,7 +691,7 @@ void run_partial_density_probe_test(const context& ctx) {
 
     std::vector<target_handle> targets;
     std::vector<fvm_index_type> cell_to_intdom;
-    probe_association_map<fvm_probe_info> probe_map;
+    probe_association_map probe_map;
 
     fvm_cell lcell(*ctx);
     lcell.initialize({0, 1}, rec, cell_to_intdom, targets, probe_map);
@@ -699,12 +699,12 @@ void run_partial_density_probe_test(const context& ctx) {
     // There should be 10 probes on each cell, but only 10 in total in the probe map,
     // as only those probes that are in the mechanism support should have an entry.
 
-    EXPECT_EQ(10u, rec.num_probes(0));
-    EXPECT_EQ(10u, rec.num_probes(1));
+    EXPECT_EQ(10u, rec.get_probes(0).size());
+    EXPECT_EQ(10u, rec.get_probes(1).size());
     EXPECT_EQ(10u, probe_map.size());
 
-    auto probe_scalar_handle = [&](cell_member_type x) {
-        return util::get<fvm_probe_scalar>(probe_map.at(x).handle.info).raw_handles[0];
+    auto get_probe_raw_handle = [&](cell_member_type x, unsigned i = 0) {
+        return probe_map.data_on(x).front().raw_handle_range()[i];
     };
 
     // Check probe values against expected values.
@@ -714,10 +714,10 @@ void run_partial_density_probe_test(const context& ctx) {
         for (cell_gid_type gid: {0, 1}) {
             cell_member_type probe_id{gid, probe_lid};
             if (std::isnan(tp.expected[gid])) {
-                EXPECT_EQ(0u, probe_map.count(probe_id));
+                EXPECT_EQ(0u, probe_map.data.count(probe_id));
             }
             else {
-                probe_handle h = probe_scalar_handle(probe_id);
+                probe_handle h = get_probe_raw_handle(probe_id);
                 EXPECT_DOUBLE_EQ(tp.expected[gid], deref(h));
             }
         }
