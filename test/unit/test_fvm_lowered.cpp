@@ -491,10 +491,10 @@ TEST(fvm_lowered, derived_mechs) {
         std::vector<double> samples[3];
 
         sampler_function sampler =
-            [&](cell_member_type pid, probe_tag, util::any_ptr, std::size_t n, const sample_record* records) {
+            [&](probe_metadata pm, std::size_t n, const sample_record* records) {
                 for (std::size_t i = 0; i<n; ++i) {
                     double v = *util::any_cast<const double*>(records[i].data);
-                    samples[pid.gid].push_back(v);
+                    samples[pm.id.gid].push_back(v);
                 }
             };
 

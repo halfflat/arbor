@@ -788,14 +788,13 @@ void run_axial_and_ion_current_probe_sampled_test(const context& ctx) {
     std::vector<double> i_memb;
 
     sim.add_sampler(all_probes, explicit_schedule({20*tau}),
-        [&](cell_member_type probe_id, probe_tag tag, util::any_ptr metadata,
-           std::size_t n_sample, const sample_record* samples)
+        [&](probe_metadata pm, std::size_t n_sample, const sample_record* samples)
         {
             // Expect exactly one sample.
             ASSERT_EQ(1u, n_sample);
 
-            if (tag==1) { // (whole cell probe)
-                const mcable_list* m = util::any_cast<const mcable_list*>(metadata);
+            if (pm.tag==1) { // (whole cell probe)
+                const mcable_list* m = util::any_cast<const mcable_list*>(pm.meta);
                 ASSERT_NE(nullptr, m);
                 // Metadata should comprise one cable per CV.
                 ASSERT_EQ(n_cv, m->size());
@@ -810,15 +809,15 @@ void run_axial_and_ion_current_probe_sampled_test(const context& ctx) {
             }
             else { // axial current probe
                 // Probe id tells us which axial current this is.
-                ASSERT_LT(probe_id.index, n_axial_probe);
+                ASSERT_LT(pm.id.index, n_axial_probe);
 
-                const mlocation* m = util::any_cast<const mlocation*>(metadata);
+                const mlocation* m = util::any_cast<const mlocation*>(pm.meta);
                 ASSERT_NE(nullptr, m);
 
                 const double* s = util::any_cast<const double*>(samples[0].data);
                 ASSERT_NE(nullptr, s);
 
-                i_axial.at(probe_id.index) = *s;
+                i_axial.at(pm.id.index) = *s;
             }
         });
 
@@ -844,7 +843,10 @@ void run_axial_and_ion_current_probe_sampled_test(const context& ctx) {
 
 
 // Run given cells taking samples from the provied probes on one of the cells.
-// Use default mechanism catalogue augmented by unit test specific mechanisms.
+// Ignore all by the first probe associated with a probe id, should there be
+// more than one.
+//
+// Use the default mechanism catalogue augmented by unit test specific mechanisms.
 // (Timestep fixed at 0.025 ms).
 
 template <typename SampleData, typename SampleMeta = void>
@@ -869,13 +871,19 @@ auto run_simple_samplers(
     };
     simulation sim(rec, partition_load_balance(rec, ctx, phints), ctx);
 
-    std::vector<trace_data<SampleData, SampleMeta>> traces(n_probe);
+    std::vector<trace_vector<SampleData, SampleMeta>> traces(n_probe);
     for (unsigned i = 0; i<n_probe; ++i) {
         sim.add_sampler(one_probe({probe_cell, i}), explicit_schedule(when), make_simple_sampler(traces[i]));
     }
 
     sim.run(t_end, 0.025);
-    return traces;
+
+    // Return just the traces with index 0.
+    std::vector<trace_data<SampleData, SampleMeta>> result(n_probe);
+    for (unsigned i = 0; i<n_probe; ++i) {
+        if (!traces[i].empty()) result[i] = std::move(traces[i][0]);
+    }
+    return result;
 }
 
 template <typename SampleData, typename SampleMeta = void>
@@ -909,12 +917,16 @@ void run_v_sampled_test(const context& ctx) {
     std::vector<double> when = {0.3, 0.6}; // Sample at 0.3 and 0.6 ms.
 
     auto trace0 = run_simple_sampler<double, mlocation>(ctx, t_end, cells, 0, cable_probe_membrane_voltage{probe_loc}, when);
+    ASSERT_TRUE(trace0);
+
+    EXPECT_EQ(probe_loc, trace0.meta);
     EXPECT_EQ(2u, trace0.size());
-    EXPECT_EQ(probe_loc, trace0.metadata.value());
 
     auto trace1 = run_simple_sampler<double, mlocation>(ctx, t_end, cells, 1, cable_probe_membrane_voltage{probe_loc}, when);
+    ASSERT_TRUE(trace1);
+
+    EXPECT_EQ(probe_loc, trace1.meta);
     EXPECT_EQ(2u, trace1.size());
-    EXPECT_EQ(probe_loc, trace1.metadata.value());
 
     EXPECT_EQ(trace0[0].t, trace1[0].t);
     EXPECT_EQ(trace0[0].v, trace1[0].v);
@@ -992,8 +1004,8 @@ void run_total_current_test(const context& ctx) {
             // Total membrane current and total ionic mebrane current should have the
             // same support and same metadata.
 
-            ASSERT_EQ((n_cv_per_branch+(int)interior_forks)*n_branch, traces[i].metadata.value().size());
-            EXPECT_EQ(ion_traces[i].metadata, traces[i].metadata);
+            ASSERT_EQ((n_cv_per_branch+(int)interior_forks)*n_branch, traces[i].meta.size());
+            EXPECT_EQ(ion_traces[i].meta, traces[i].meta);
             EXPECT_EQ(ion_traces[i][0].v.size(), traces[i][0].v.size());
             EXPECT_EQ(ion_traces[i][1].v.size(), traces[i][1].v.size());
 

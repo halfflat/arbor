@@ -84,6 +84,7 @@ struct sampler_call_info {
     sampler_function sampler;
     cell_member_type probe_id;
     probe_tag tag;
+    unsigned index;
     const fvm_probe_data* pdata_ptr;
 
     // Offsets are into lowered cell sample time and event arrays.
@@ -134,7 +135,7 @@ void run_samples(
 
     // Metadata may be an mlocation or cell_lid_type (for point mechanism state probes).
     util::visit(
-        [&](auto& metadata) { sc.sampler(sc.probe_id, sc.tag, &metadata, n_sample, sample_records.data()); },
+        [&](auto& metadata) { sc.sampler({sc.probe_id, sc.tag, sc.index, &metadata}, n_sample, sample_records.data()); },
         p.metadata);
 }
 
@@ -165,7 +166,7 @@ void run_samples(
         sample_records.push_back(sample_record{time_type(raw_times[offset]), &ctmp[j]});
     }
 
-    sc.sampler(sc.probe_id, sc.tag, &p.metadata, n_sample, sample_records.data());
+    sc.sampler({sc.probe_id, sc.tag, sc.index, &p.metadata}, n_sample, sample_records.data());
 }
 
 void run_samples(
@@ -197,7 +198,7 @@ void run_samples(
 
     // Metadata may be an mlocation_list or mcable_list.
     util::visit(
-        [&](auto& metadata) { sc.sampler(sc.probe_id, sc.tag, &metadata, n_sample, sample_records.data()); },
+        [&](auto& metadata) { sc.sampler({sc.probe_id, sc.tag, sc.index, &metadata}, n_sample, sample_records.data()); },
         p.metadata);
 }
 
@@ -242,8 +243,9 @@ void run_samples(
     }
 
     // (Unlike fvm_probe_multi, we only have mcable_list metadata.)
-    sc.sampler(sc.probe_id, sc.tag, &p.metadata, n_sample, sample_records.data());
+    sc.sampler({sc.probe_id, sc.tag, sc.index, &p.metadata}, n_sample, sample_records.data());
 }
+
 void run_samples(
     const fvm_probe_membrane_currents& p,
     const sampler_call_info& sc,
@@ -303,7 +305,7 @@ void run_samples(
         sample_records.push_back(sample_record{time_type(raw_times[offset]), &csample_ranges[j]});
     }
 
-    sc.sampler(sc.probe_id, sc.tag, &p.metadata, n_sample, sample_records.data());
+    sc.sampler({sc.probe_id, sc.tag, sc.index, &p.metadata}, n_sample, sample_records.data());
 }
 
 // Generic run_samples dispatches on probe info variant type.
@@ -400,8 +402,9 @@ void mc_cell_group::advance(epoch ep, time_type dt, const event_lane_subrange& e
             auto cell_index = gid_index_map_.at(pid.gid);
 
             probe_tag tag = probe_map_.tag.at(pid);
+            unsigned index = 0;
             for (const fvm_probe_data& pdata: probe_map_.data_on(pid)) {
-                call_info.push_back({sa.sampler, pid, tag, &pdata, n_samples, n_samples + n_times*pdata.n_raw()});
+                call_info.push_back({sa.sampler, pid, tag, index++, &pdata, n_samples, n_samples + n_times*pdata.n_raw()});
 
                 for (auto t: sample_times) {
                     for (probe_handle h: pdata.raw_handle_range()) {

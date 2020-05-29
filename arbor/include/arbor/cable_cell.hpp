@@ -15,6 +15,7 @@
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/primitives.hpp>
+#include <arbor/util/hash_def.hpp>
 #include <arbor/util/typed_map.hpp>
 
 namespace arb {
@@ -336,3 +337,5 @@ private:
 };
 
 } // namespace arb
+
+ARB_DEFINE_HASH(arb::cable_probe_point_info, a.target, a.multiplicity, a.loc);
