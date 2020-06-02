@@ -20,8 +20,9 @@ struct probe_info {
     probe_info(probe_info&&) = default;
 
     // Implicit ctor uses tag of zero.
-    probe_info(util::any address, probe_tag tag = 0):
-        tag(tag), address(std::move(address)) {}
+    template <typename X>
+    probe_info(X&& x, probe_tag tag = 0):
+        tag(tag), address(std::forward<X>(x)) {}
 };
 
 /* Recipe descriptions are cell-oriented: in order that the building
