@@ -242,6 +242,42 @@ std::ostream& operator<<(std::ostream& o, const most_proximal_& x) {
     return o << "(proximal \"" << x.reg << "\")";
 }
 
+// Boundary points of a region.
+//
+// The boundary points of a region R are defined as the most proximal
+// and most distal locations in the components of R.
+
+struct boundary_: locset_tag {
+    explicit boundary_(region reg): reg(std::move(reg)) {}
+    region reg;
+};
+
+locset boundary(region reg) {
+    return locset(boundary_(std::move(reg)));
+};
+
+mlocation_list thingify_(const boundary_& n, const mprovider& p) {
+    std::vector<mextent> comps = components(p.morphology(), thingify(n.reg, p));
+
+    mlocation_list L;
+
+    for (const mextent& comp: comps) {
+        mlocation_list proximal_set, distal_set;
+
+        for (const mcable& c: comp) {
+            proximal_set.push_back({c.branch, c.prox_pos});
+            distal_set.push_back({c.branch, c.dist_pos});
+        }
+
+        L = join(join(L, minset(p.morphology(), proximal_set)),
+                maxset(p.morphology(), distal_set));
+    }
+    return L;
+}
+
+std::ostream& operator<<(std::ostream& o, const boundary_& x) {
+    return o << "(boundary " << x.reg << ")";
+}
 
 // Uniform locset.
 

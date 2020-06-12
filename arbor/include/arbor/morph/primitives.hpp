@@ -104,8 +104,12 @@ struct mcable {
     double prox_pos; // ∈ [0,1]
     double dist_pos; // ∈ [0,1]
 
-    friend mlocation prox_loc(const mcable&);
-    friend mlocation dist_loc(const mcable&);
+    friend mlocation prox_loc(const mcable& c) {
+        return {c.branch, c.prox_pos};
+    }
+    friend mlocation dist_loc(const mcable& c) {
+        return {c.branch, c.dist_pos};
+    }
 
     // branch ≠ npos, and 0 ≤ prox_pos ≤ dist_pos ≤ 1
     friend bool test_invariants(const mcable&);

@@ -139,8 +139,11 @@ locset nil();
 // Most distal points of a region.
 locset most_distal(region reg);
 
-// Most proximal point of a region.
+// Most proximal points of a region.
 locset most_proximal(region reg);
+
+// Boundary points of a region.
+locset boundary(region reg);
 
 // Returns all locations in a locset that are also in the region.
 locset restrict(locset ls, region reg);
@@ -151,6 +154,8 @@ locset uniform(region reg, unsigned left, unsigned right, uint64_t seed);
 
 // Proportional location on every branch.
 locset on_branches(double pos);
+
+// 
 
 } // namespace ls
 
