@@ -145,6 +145,10 @@ locset most_proximal(region reg);
 // Boundary points of a region.
 locset boundary(region reg);
 
+// Completed boundary points of a region.
+// (Boundary of completed components.)
+locset cboundary(region reg);
+
 // Returns all locations in a locset that are also in the region.
 locset restrict(locset ls, region reg);
 

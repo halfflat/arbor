@@ -13,13 +13,6 @@
 // the boundary points 100% faithfully; for example, it may elide empty CVs or
 // perform other transformations for numeric fidelity or performance reasons.
 //
-// With the exception of cv_policy_explicit (see below), policies can be
-// restricted to apply only to a given region of a cell morphology. If a region
-// is supplied, the CV policy is applied to each connected subtree of the
-// morphology within the region, as if each subtree were itself a full cell
-// morphology. The boundary points of the region are always included as
-// boundary points provided by the policy.
-//
 // The cv_policy class is a value-like wrapper for actual policies that derive
 // from `cv_policy_base`. At present, there are only a handful of policies
 // implemented, described below. The intent is to provide more sophisticated
@@ -37,6 +30,13 @@
 //   cv_policy_max_extent:
 //       Use as many CVs as required to ensure that no CV has
 //       a length longer than a given value.
+//
+// The policies above can be restricted to apply only to a given region of a
+// cell morphology. If a region is supplied, the CV policy is applied to the
+// completion of each connected component of the morphology within the region,
+// as if the subtree described by each component were itself a full cell
+// morphology. The boundary points of these completed components are always
+// included as boundary points provided by the policy.
 //
 // Except for the single and explicit policies, CV policies may also take
 // various flags (implemented as bitwise orable enums) to modify their
@@ -89,12 +89,17 @@ struct cv_policy {
         return policy_ptr->cv_boundary_points(cell);
     }
 
-    friend cv_policy operator+(const cv_policy&, const cv_policy&);
-    friend cv_policy operator|(const cv_policy&, const cv_policy&);
+    region domain() const {
+        return policy_ptr->domain();
+    }
 
 private:
     cv_policy_base_ptr policy_ptr;
 };
+
+cv_policy operator+(const cv_policy&, const cv_policy&);
+cv_policy operator|(const cv_policy&, const cv_policy&);
+
 
 // Common flags for CV policies; bitwise composable.
 namespace cv_policy_flag {
@@ -106,17 +111,19 @@ namespace cv_policy_flag {
 }
 
 struct cv_policy_explicit: cv_policy_base {
-    explicit cv_policy_explicit(locset locs): locs_(std::move(locs)) {}
+    explicit cv_policy_explicit(locset locs, region domain = reg::all()):
+        locs_(std::move(locs)), domain_(std::move(domain)) {}
 
     cv_policy_base_ptr clone() const override {
         return cv_policy_base_ptr(new cv_policy_explicit(*this));
     }
 
-    locset cv_boundary_points(const cable_cell&) const override { return locs_; }
-    region domain() const override { return reg::all(); }
+    locset cv_boundary_points(const cable_cell&) const override;
+    region domain() const override { return domain_; }
 
 private:
     locset locs_;
+    region domain_;
 };
 
 struct cv_policy_single: cv_policy_base {
@@ -128,7 +135,7 @@ struct cv_policy_single: cv_policy_base {
     }
 
     locset cv_boundary_points(const cable_cell&) const override {
-        return ls::boundary(reg::complete(domain_));
+        return ls::cboundary(domain_);
     }
     region domain() const override { return domain_; }
 

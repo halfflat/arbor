@@ -279,6 +279,44 @@ std::ostream& operator<<(std::ostream& o, const boundary_& x) {
     return o << "(boundary " << x.reg << ")";
 }
 
+// Completed boundary points of a region.
+//
+// The completed boundary is the boundary of the completion of
+// each component.
+
+struct cboundary_: locset_tag {
+    explicit cboundary_(region reg): reg(std::move(reg)) {}
+    region reg;
+};
+
+locset cboundary(region reg) {
+    return locset(cboundary_(std::move(reg)));
+};
+
+mlocation_list thingify_(const cboundary_& n, const mprovider& p) {
+    std::vector<mextent> comps = components(p.morphology(), thingify(n.reg, p));
+
+    mlocation_list L;
+
+    for (const mextent& comp: comps) {
+        mlocation_list proximal_set, distal_set;
+
+        mextent ccomp = thingify(reg::complete(comp), p);
+        for (const mcable& c: ccomp.cables()) {
+            proximal_set.push_back({c.branch, c.prox_pos});
+            distal_set.push_back({c.branch, c.dist_pos});
+        }
+
+        L = join(join(L, minset(p.morphology(), proximal_set)),
+                maxset(p.morphology(), distal_set));
+    }
+    return L;
+}
+
+std::ostream& operator<<(std::ostream& o, const cboundary_& x) {
+    return o << "(cboundary " << x.reg << ")";
+}
+
 // Uniform locset.
 
 struct uniform_ {

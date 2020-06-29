@@ -9,18 +9,19 @@
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/locset.hpp>
 #include <arbor/morph/mprovider.hpp>
+#include <arbor/morph/region.hpp>
 
 #include "util/filter.hpp"
 #include "util/rangeutil.hpp"
 #include "util/span.hpp"
 
-#include "common.hpp"
 #include "common_morphologies.hpp"
-#include "unit_test_catalogue.hpp"
-#include "../common_cells.hpp"
+#include "morph_pred.hpp"
 
 using namespace arb;
 using util::make_span;
+using testing::locset_eq;
+using testing::mlocationlist_eq;
 
 using namespace common_morphology;
 
@@ -40,13 +41,39 @@ TEST(cv_policy, explicit_policy) {
         cable_cell cell(m);
 
         locset result = pol.cv_boundary_points(cell);
-        EXPECT_EQ(thingify(lset, cell.provider()), thingify(result, cell.provider()));
+        locset expected = join(ls::boundary(reg::all()), lset);
+        EXPECT_TRUE(locset_eq(cell.provider(), expected, result));
+    }
+
+    // With cables 1 and 2, expect to pick up (1, 0.5) from locset,
+    // and cable ends (1, 0), (1, 1), (2, 0), (2, 1), as the two
+    // cables constitute two components.
+
+    region b12 = join(reg::branch(1), reg::branch(2));
+    pol = cv_policy_explicit(lset, b12);
+    for (auto& m: {m_reg_b6, m_mlt_b6}) {
+        cable_cell cell(m);
+
+        locset result = pol.cv_boundary_points(cell);
+        locset expected = as_locset(L{1, 0}, L{1, 0.5}, L{1, 1}, L{2, 0}, L{2, 1});
+        EXPECT_TRUE(locset_eq(cell.provider(), expected, result));
+    }
+
+    // Taking the completion of the two cables, the boundary of the region
+    // will be (0, 1), (1, 1), (2, 1) for m_mlt_b6.
+
+    pol = cv_policy_explicit(lset, reg::complete(b12));
+    for (auto& m: {m_mlt_b6}) {
+        cable_cell cell(m);
+
+        locset result = pol.cv_boundary_points(cell);
+        locset expected = as_locset(L{0, 1}, L{1, 0.5}, L{1, 1}, L{2, 1});
+        EXPECT_TRUE(locset_eq(cell.provider(), expected, result));
     }
 }
 
 TEST(cv_policy, empty_morphology) {
-    // Any policy applied to an empty morphology should give an empty locset,
-    // with the exception of cv_policy_explicit (this is still being debated).
+    // Any policy applied to an empty morphology should give an empty locset.
 
     using namespace cv_policy_flag;
 
@@ -54,14 +81,16 @@ TEST(cv_policy, empty_morphology) {
         cv_policy_fixed_per_branch(3),
         cv_policy_fixed_per_branch(3, interior_forks),
         cv_policy_max_extent(0.234),
-        cv_policy_max_extent(0.234, interior_forks)
+        cv_policy_max_extent(0.234, interior_forks),
+        cv_policy_single(),
+        cv_policy_single(reg::all()),
+        cv_policy_explicit(ls::location(0, 0))
     };
 
     cable_cell cell(m_empty);
-    auto empty_loclist = thingify(ls::nil(), cell.provider());
 
     for (auto& pol: policies) {
-        EXPECT_EQ(empty_loclist, thingify(pol.cv_boundary_points(cell), cell.provider()));
+        EXPECT_TRUE(locset_eq(cell.provider(), ls::nil(), pol.cv_boundary_points(cell)));
     }
 }
 
@@ -75,16 +104,15 @@ TEST(cv_policy, fixed_per_branch) {
         {
             // boundary fork points
             cv_policy pol = cv_policy_fixed_per_branch(4);
-            locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(L{0, 0}, L{0, 0.25}, L{0, 0.5}, L{0, 0.75}, L{0, 1});
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
         {
             // interior fork points
             cv_policy pol = cv_policy_fixed_per_branch(4, interior_forks);
             locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(L{0, 0}, L{0, 0.125}, L{0, 0.375}, L{0, 0.625}, L{0, 0.875}, L{0, 1});
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
     }
 
@@ -96,17 +124,15 @@ TEST(cv_policy, fixed_per_branch) {
         {
             // With boundary fork points:
             cv_policy pol = cv_policy_fixed_per_branch(2);
-            locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(
                 L{0, 0}, L{0, 0.5}, L{0,1}, L{1, 0}, L{1, 0.5}, L{1,1}, L{2, 0}, L{2, 0.5}, L{2,1},
                 L{3, 0}, L{3, 0.5}, L{3,1}, L{4, 0}, L{4, 0.5}, L{4,1}, L{5, 0}, L{5, 0.5}, L{5,1}
             );
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
         {
             // With interior fork points:
             cv_policy pol = cv_policy_fixed_per_branch(2, interior_forks);
-            locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(
                 L{0, 0}, L{0, 0.25}, L{0, 0.75},
                 L{1, 0.25}, L{1, 0.75}, L{1, 1.0},
@@ -115,8 +141,28 @@ TEST(cv_policy, fixed_per_branch) {
                 L{4, 0.25}, L{4, 0.75}, L{4, 1.0},
                 L{5, 0.25}, L{5, 0.75}, L{5, 1.0}
             );
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
+    }
+
+    // Restrict to an incomplete subtree (distal half of branch 0 and all of branch 2)
+    // in m_mlt_b6 morphology.
+    //
+    // With two per branch and interior forks, expect to see:
+    //      (0, 0.5), (0, 0.625), (0.0875) on branch 0;
+    //      (2, 0.25), (2, 0.75), (2, 1.) on branch 2;
+    //      (1, 0) on branch 1.
+    {
+        cable_cell cell(m_mlt_b6);
+
+        region reg = mcable_list{{0, 0.5, 1.}, {2, 0., 1.}};
+        cv_policy pol = cv_policy_fixed_per_branch(2, reg, interior_forks);
+        locset expected = as_locset(
+            L{0, 0.5}, L{0, 0.625}, L{0, 0.875},
+            L{1, 0},
+            L{2, 0.25}, L{2, 0.75}, L{2, 1}
+        );
+        EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
     }
 }
 
@@ -133,15 +179,13 @@ TEST(cv_policy, max_extent) {
             // extent of 0.25 should give exact fp calculation, giving
             // 4 CVs on the root branch.
             cv_policy pol = cv_policy_max_extent(0.25);
-            locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(L{0, 0}, L{0, 0.25}, L{0, 0.5}, L{0, 0.75}, L{0, 1});
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
         {
             cv_policy pol = cv_policy_max_extent(0.25, interior_forks);
-            locset points = pol.cv_boundary_points(cell);
             locset expected = as_locset(L{0, 0}, L{0, 0.125}, L{0, 0.375}, L{0, 0.625}, L{0, 0.875}, L{0, 1});
-            EXPECT_EQ(thingify(expected, cell.provider()), thingify(points, cell.provider()));
+            EXPECT_TRUE(locset_eq(cell.provider(), expected, pol.cv_boundary_points(cell)));
         }
     }
 
@@ -167,7 +211,7 @@ TEST(cv_policy, max_extent) {
                 {1, 0},  {1, 0.5},  {1, 1},
                 {2, 0},  {2, 0.25}, {2, 0.5}, {2, 0.75}, {2, 1}
             };
-            EXPECT_EQ(expected_b012, points_b012);
+            EXPECT_TRUE(mlocationlist_eq(expected_b012, points_b012));
 
             mlocation_list points_b3 = util::assign_from(util::filter(points, [](mlocation l) { return l.branch==3; }));
             EXPECT_EQ(8u, points_b3.size());
@@ -195,8 +239,6 @@ TEST(cv_policy, every_sample) {
     {
         cable_cell cell(m);
         cv_policy pol = cv_policy_every_sample();
-        mlocation_list points = thingify(pol.cv_boundary_points(cell), cell.provider());
-        util::sort(points);
 
         mlocation_list expected = {
             {0, 0}, {0, 0.25}, {0, 0.5}, {0, 0.75}, {0, 1.},
@@ -204,6 +246,11 @@ TEST(cv_policy, every_sample) {
             {2, 0}, {2, 0.25}, {2, 0.5}, {2, 0.75}, {2, 1.}
         };
 
-        EXPECT_EQ(expected, points);
+        EXPECT_TRUE(locset_eq(cell.provider(), locset(expected), pol.cv_boundary_points(cell)));
     }
+}
+
+TEST(cv_policy, domain) {
+    
+
 }
