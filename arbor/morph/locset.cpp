@@ -269,10 +269,10 @@ mlocation_list thingify_(const boundary_& n, const mprovider& p) {
             distal_set.push_back({c.branch, c.dist_pos});
         }
 
-        L = join(join(L, minset(p.morphology(), proximal_set)),
-                maxset(p.morphology(), distal_set));
+        L = sum(L, minset(p.morphology(), proximal_set));
+        L = sum(L, maxset(p.morphology(), distal_set));
     }
-    return L;
+    return support(std::move(L));
 }
 
 std::ostream& operator<<(std::ostream& o, const boundary_& x) {
@@ -307,10 +307,10 @@ mlocation_list thingify_(const cboundary_& n, const mprovider& p) {
             distal_set.push_back({c.branch, c.dist_pos});
         }
 
-        L = join(join(L, minset(p.morphology(), proximal_set)),
-                maxset(p.morphology(), distal_set));
+        L = sum(L, minset(p.morphology(), proximal_set));
+        L = sum(L, maxset(p.morphology(), distal_set));
     }
-    return L;
+    return support(std::move(L));
 }
 
 std::ostream& operator<<(std::ostream& o, const cboundary_& x) {
@@ -420,6 +420,25 @@ mlocation_list thingify_(const lsum& P, const mprovider& p) {
 
 std::ostream& operator<<(std::ostream& o, const lsum& x) {
     return o << "(sum " << x.lhs << " " << x.rhs << ")";
+}
+
+// Support of point set.
+
+struct lsup_: locset_tag {
+    locset arg;
+    lsup_(locset arg): arg(std::move(arg)) {}
+};
+
+locset support(locset arg) {
+    return locset{lsup_{std::move(arg)}};
+}
+
+mlocation_list thingify_(const lsup_& P, const mprovider& p) {
+    return support(thingify(P.arg, p));
+};
+
+std::ostream& operator<<(std::ostream& o, const lsup_& x) {
+    return o << "(support " << x.arg << ")";
 }
 
 // Restrict a locset on to a region: returns all locations in the locset that

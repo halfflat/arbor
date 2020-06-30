@@ -1,3 +1,4 @@
+#include <utility>
 #include <vector>
 
 #include <arbor/cable_cell.hpp>
@@ -12,6 +13,10 @@
 
 namespace arb {
 
+static auto unique_sum = [](auto&&... lss) {
+    return ls::support(sum(std::forward<decltype(lss)>(lss)...));
+};
+
 // Combinators:
 // cv_policy_plus_ represents the result of operator+,
 // cv_policy_bar_ represents the result of operator|.
@@ -25,7 +30,7 @@ struct cv_policy_plus_: cv_policy_base {
     }
 
     locset cv_boundary_points(const cable_cell& c) const override {
-        return join(lhs_.cv_boundary_points(c), rhs_.cv_boundary_points(c));
+        return unique_sum(lhs_.cv_boundary_points(c), rhs_.cv_boundary_points(c));
     }
 
     region domain() const override { return join(lhs_.domain(), rhs_.domain()); }
@@ -46,7 +51,7 @@ struct cv_policy_bar_: cv_policy_base {
     }
 
     locset cv_boundary_points(const cable_cell& c) const override {
-        return join(ls::restrict(lhs_.cv_boundary_points(c), complement(rhs_.domain())), rhs_.cv_boundary_points(c));
+        return unique_sum(ls::restrict(lhs_.cv_boundary_points(c), complement(rhs_.domain())), rhs_.cv_boundary_points(c));
     }
 
     region domain() const override { return join(lhs_.domain(), rhs_.domain()); }
@@ -63,12 +68,14 @@ cv_policy operator|(const cv_policy& lhs, const cv_policy& rhs) {
 locset cv_policy_explicit::cv_boundary_points(const cable_cell& cell) const {
     auto comps = components(cell.morphology(), thingify(domain_, cell.provider()));
 
-    return util::foldl(
-        [this](locset l, const auto& comp) {
-            return join(std::move(l), ls::restrict(locs_, comp));
-        },
-        ls::boundary(domain_),
-        components(cell.morphology(), thingify(domain_, cell.provider())));
+    return
+        ls::support(
+            util::foldl(
+                [this](locset l, const auto& comp) {
+                    return sum(std::move(l), ls::restrict(locs_, comp));
+                },
+                ls::boundary(domain_),
+                components(cell.morphology(), thingify(domain_, cell.provider()))));
 }
 
 locset cv_policy_max_extent::cv_boundary_points(const cable_cell& cell) const {
@@ -101,7 +108,7 @@ locset cv_policy_max_extent::cv_boundary_points(const cable_cell& cell) const {
     }
 
     util::sort(points);
-    return join(locset(std::move(points)), ls::cboundary(domain_));
+    return unique_sum(locset(std::move(points)), ls::cboundary(domain_));
 }
 
 locset cv_policy_fixed_per_branch::cv_boundary_points(const cable_cell& cell) const {
@@ -131,7 +138,7 @@ locset cv_policy_fixed_per_branch::cv_boundary_points(const cable_cell& cell) co
     }
 
     util::sort(points);
-    return join(locset(std::move(points)), ls::cboundary(domain_));
+    return unique_sum(locset(std::move(points)), ls::cboundary(domain_));
 }
 
 locset cv_policy_every_sample::cv_boundary_points(const cable_cell& cell) const {
@@ -141,16 +148,14 @@ locset cv_policy_every_sample::cv_boundary_points(const cable_cell& cell) const 
     // Always include branch proximal points, so that forks are trivial.
     // Ignores interior_forks flag.
 
-    return
-        ls::restrict(
-            join(
-                ls::on_branches(0.),
-                ls::cboundary(domain_),
+    return 
+        unique_sum(ls::cboundary(domain_),
+            ls::restrict(
                 util::foldl(
                     [](locset l, msize_t sidx) { return sum(std::move(l), ls::sample(sidx)); },
-                    ls::nil(),
-                    util::make_span(cell.morphology().num_samples()))),
-            domain_);
+                    ls::on_branches(0),
+                    util::make_span(cell.morphology().num_samples())),
+                domain_));
 }
 
 } // namespace arb

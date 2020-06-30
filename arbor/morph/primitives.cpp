@@ -7,6 +7,7 @@
 #include "io/sepval.hpp"
 #include "util/span.hpp"
 #include "util/rangeutil.hpp"
+#include "util/unique.hpp"
 
 namespace arb {
 
@@ -122,6 +123,11 @@ mlocation_list intersection(const mlocation_list& lhs, const mlocation_list& rhs
         }
     }
 
+    return L;
+}
+
+mlocation_list support(mlocation_list L) {
+    util::unique_in_place(L);
     return L;
 }
 

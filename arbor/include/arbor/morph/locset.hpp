@@ -159,12 +159,14 @@ locset uniform(region reg, unsigned left, unsigned right, uint64_t seed);
 // Proportional location on every branch.
 locset on_branches(double pos);
 
-// 
+// Support of a locset (x s.t. x in locset).
+locset support(locset);
 
 } // namespace ls
 
 // Union of two locsets.
 locset join(locset, locset);
+
 // Multiset sum of two locsets.
 locset sum(locset, locset);
 

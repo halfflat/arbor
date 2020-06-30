@@ -88,6 +88,7 @@ bool test_invariants(const mlocation_list&);
 mlocation_list sum(const mlocation_list&, const mlocation_list&);
 mlocation_list join(const mlocation_list&, const mlocation_list&);
 mlocation_list intersection(const mlocation_list&, const mlocation_list&);
+mlocation_list support(mlocation_list);
 
 // Describe an unbranched cable in the morphology.
 //
