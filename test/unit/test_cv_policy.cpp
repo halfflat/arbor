@@ -21,6 +21,7 @@
 using namespace arb;
 using util::make_span;
 using testing::locset_eq;
+using testing::region_eq;
 using testing::mlocationlist_eq;
 
 using namespace common_morphology;
@@ -314,6 +315,60 @@ TEST(cv_policy, every_sample) {
 }
 
 TEST(cv_policy, domain) {
-    
+    using namespace cv_policy_flag;
 
+    region reg1 = join(reg::branch(1), reg::cable(2, 0, 0.5));
+    region reg2 = join(reg::branch(1), reg::cable(2, 0.5, 1), reg::cable(4, 0, 1));
+
+    cable_cell cell(m_mlt_b6);
+
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_single(reg1).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_fixed_per_branch(3, reg1).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_fixed_per_branch(3, reg1, interior_forks).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_max_extent(3, reg1).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_max_extent(3, reg1, interior_forks).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), reg1, cv_policy_every_sample(reg1).domain()));
+
+    EXPECT_TRUE(region_eq(cell.provider(), join(reg1, reg2), (cv_policy_single(reg1)+cv_policy_single(reg2)).domain()));
+    EXPECT_TRUE(region_eq(cell.provider(), join(reg1, reg2), (cv_policy_single(reg1)|cv_policy_single(reg2)).domain()));
+}
+
+TEST(cv_policy, combinators) {
+    auto unique_sum = [](auto... a) { return ls::support(sum(locset(a)...)); };
+
+    cable_cell cell(m_reg_b6);
+    auto eval_locset_eq = [&cell](const locset& a, const cv_policy& p) {
+        return locset_eq(cell.provider(), a, p.cv_boundary_points(cell));
+    };
+
+    {
+        mlocation_list locs1{{0, 0.5}, {1, 0.25}, {2, 1}};
+        mlocation_list locs2{{0, 0.75}, {1, 0.25}, {4, 0}};
+        locset all_bdy = ls::boundary(reg::all());
+
+        ASSERT_TRUE(eval_locset_eq(unique_sum(all_bdy, locs1), cv_policy_explicit(locs1)));
+        ASSERT_TRUE(eval_locset_eq(unique_sum(all_bdy, locs2), cv_policy_explicit(locs2)));
+
+        EXPECT_TRUE(eval_locset_eq(unique_sum(all_bdy, locs1, locs2), cv_policy_explicit(locs1)+cv_policy_explicit(locs2)));
+        EXPECT_TRUE(eval_locset_eq(unique_sum(all_bdy, locs2), cv_policy_explicit(locs1)|cv_policy_explicit(locs2)));
+    }
+
+    {
+        region reg12 = join(reg::branch(1), reg::branch(2));
+        region reg23 = join(reg::branch(2), reg::branch(3));
+
+        cv_policy pol12 = cv_policy_explicit(ls::on_branches(0.5), reg12);
+        cv_policy pol23 = cv_policy_explicit(ls::on_branches(0.75), reg23);
+
+        using L = mlocation;
+
+        ASSERT_TRUE(eval_locset_eq(unique_sum(ls::boundary(reg12), L{1, 0.5}, L{2, 0.5}), pol12));
+        ASSERT_TRUE(eval_locset_eq(unique_sum(ls::boundary(reg23), L{2, 0.75}, L{3, 0.75}), pol23));
+
+        EXPECT_TRUE(eval_locset_eq(unique_sum(ls::boundary(reg12), ls::boundary(reg23), L{1, 0.5}, L{2, 0.5}, L{2, 0.75}, L{3, 0.75}),
+            pol12+pol23));
+
+        EXPECT_TRUE(eval_locset_eq(unique_sum(ls::boundary(reg12), ls::boundary(reg23), L{1, 0.5}, L{2, 0.75}, L{3, 0.75}),
+            pol12|pol23));
+    }
 }
