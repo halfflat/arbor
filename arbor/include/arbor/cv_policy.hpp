@@ -184,11 +184,8 @@ private:
 };
 
 struct cv_policy_every_sample: cv_policy_base {
-    explicit cv_policy_every_sample(region domain, cv_policy_flag::value flags = cv_policy_flag::none):
-         domain_(std::move(domain)), flags_(flags) {}
-
-    explicit cv_policy_every_sample(cv_policy_flag::value flags = cv_policy_flag::none):
-         domain_(reg::all()), flags_(flags) {}
+    explicit cv_policy_every_sample(region domain = reg::all()):
+         domain_(std::move(domain)) {}
 
     cv_policy_base_ptr clone() const override {
         return cv_policy_base_ptr(new cv_policy_every_sample(*this));

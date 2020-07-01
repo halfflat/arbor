@@ -146,9 +146,8 @@ locset cv_policy_every_sample::cv_boundary_points(const cable_cell& cell) const 
     if (!nbranch) return ls::nil();
 
     // Always include branch proximal points, so that forks are trivial.
-    // Ignores interior_forks flag.
 
-    return 
+    return
         unique_sum(ls::cboundary(domain_),
             ls::restrict(
                 util::foldl(
