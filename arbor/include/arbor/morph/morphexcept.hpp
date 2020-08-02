@@ -41,6 +41,27 @@ struct invalid_segment_parent: morphology_error {
     msize_t tree_size;
 };
 
+struct duplicate_fragment_id: morphology_error {
+    duplicate_fragment_id(const std::string& id);
+    std::string id;
+};
+
+struct no_such_fragment: morphology_error {
+    no_such_fragment(const std::string& id);
+    std::string id;
+};
+
+struct missing_fragment_start: morphology_error {
+    missing_fragment_start(const std::string& id);
+    std::string id;
+};
+
+struct invalid_fragment_position: morphology_error {
+    invalid_fragment_position(const std::string& id, double along);
+    std::string id;
+    double along;
+};
+
 struct label_type_mismatch: morphology_error {
     label_type_mismatch(const std::string& label);
     std::string label;
