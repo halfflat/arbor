@@ -44,23 +44,23 @@ invalid_segment_parent::invalid_segment_parent(msize_t parent, msize_t tree_size
     tree_size(tree_size)
 {}
 
-duplicate_fragment_id::duplicate_fragment_id(const std::string& id):
-    morphology_error(pprintf("duplicate fragment id {}", id)),
+duplicate_stitch_id::duplicate_stitch_id(const std::string& id):
+    morphology_error(pprintf("duplicate stitch id {}", id)),
     id(id)
 {}
 
-no_such_fragment::no_such_fragment(const std::string& id):
-    morphology_error(pprintf("no such fragment id {}", id)),
+no_such_stitch::no_such_stitch(const std::string& id):
+    morphology_error(pprintf("no such stitch id {}", id)),
     id(id)
 {}
 
-missing_fragment_start::missing_fragment_start(const std::string& id):
-    morphology_error(pprintf("require proximal point for fragment id {}", id)),
+missing_stitch_start::missing_stitch_start(const std::string& id):
+    morphology_error(pprintf("require proximal point for stitch id {}", id)),
     id(id)
 {}
 
-invalid_fragment_position::invalid_fragment_position(const std::string& id, double along):
-    morphology_error(pprintf("invalid fragment position {} on fragment {}", along, id)),
+invalid_stitch_position::invalid_stitch_position(const std::string& id, double along):
+    morphology_error(pprintf("invalid stitch position {} on stitch {}", along, id)),
     id(id),
     along(along)
 {}
