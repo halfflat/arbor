@@ -21,6 +21,7 @@ struct stitch_builder_impl {
         mpoint prox;
         mpoint dist;
         int tag;
+        std::string stitch_id;
         msize_t seg_id;
     };
 
@@ -29,6 +30,23 @@ struct stitch_builder_impl {
     forest_type forest;
     std::unordered_map<std::string, forest_type::iterator> id_to_node;
     std::string last_id;
+
+    stitch_builder_impl() = default;
+    stitch_builder_impl(stitch_builder_impl&&) = default;
+    stitch_builder_impl(const stitch_builder_impl& other):
+        forest(other.forest),
+        last_id(other.last_id)
+    {
+        for (auto i = forest.preorder_begin(); i!=forest.preorder_end(); ++i) {
+            id_to_node.insert({i->stitch_id, i});
+        }
+    }
+
+    stitch_builder_impl& operator=(stitch_builder_impl&&) = default;
+    stitch_builder_impl& operator=(const stitch_builder_impl& other) {
+        if (this==&other) return *this;
+        return *this = stitch_builder_impl(other);
+    }
 
     void add(mstitch f, const std::string& parent, double along, bool infer_prox = false) {
         if (id_to_node.count(f.id)) throw duplicate_stitch_id(f.id);
@@ -56,7 +74,10 @@ struct stitch_builder_impl {
                 split.along_prox = along;
 
                 auto i = forest.push_child(p, split);
-                while (i.next()) forest.graft_child(i, forest.prune_after(i));
+                while (i.next()) {
+                    auto tmp = forest.prune_after(i);
+                    forest.graft_child(i, std::move(tmp));
+                }
             }
             else {
                 if (!f.prox) f.prox = p->dist;
@@ -64,7 +85,7 @@ struct stitch_builder_impl {
         }
         if (!f.prox) throw missing_stitch_start(f.id);
 
-        stitch_segment n{0., 1., f.prox.value(), f.dist, f.tag, msize_t(-1)};
+        stitch_segment n{0., 1., f.prox.value(), f.dist, f.tag, f.id, msize_t(-1)};
         id_to_node[f.id] = p? forest.push_child(p, n): forest.push_front(n);
         last_id = f.id;
     }
@@ -97,20 +118,21 @@ stitch_builder& stitch_builder::add(mstitch f, const std::string& parent_id, dou
 }
 
 stitch_builder& stitch_builder::add(mstitch f, double along) {
-    if (impl_->forest.empty()) throw no_such_stitch{""};
     return add(std::move(f), impl_->last_id, along);
 }
 
+stitch_builder::~stitch_builder() = default;
 
-struct stitch_tree_impl {
+
+struct stitched_morphology_impl {
     std::unordered_multimap<std::string, msize_t> id_to_segs;
     segment_tree stree;
 
-    stitch_tree_impl(stitch_builder_impl bimpl) {
+    stitched_morphology_impl(stitch_builder_impl bimpl) {
         auto iter = bimpl.forest.preorder_begin();
         auto end = bimpl.forest.preorder_end();
 
-        while (iter!=end) {
+        for (; iter!=end; ++iter) {
             msize_t seg_parent_id = iter.parent()? iter.parent()->seg_id: mnpos;
             iter->seg_id = stree.append(seg_parent_id, iter->prox, iter->dist, iter->tag);
         }
@@ -130,19 +152,19 @@ struct stitch_tree_impl {
     }
 };
 
-stitch_tree::stitch_tree(stitch_builder&& builder):
-    impl_(new stitch_tree_impl(std::move(*builder.impl_)))
+stitched_morphology::stitched_morphology(stitch_builder&& builder):
+    impl_(new stitched_morphology_impl(std::move(*builder.impl_)))
 {}
 
-stitch_tree::stitch_tree(const stitch_builder& builder):
-    impl_(new stitch_tree_impl(*builder.impl_))
+stitched_morphology::stitched_morphology(const stitch_builder& builder):
+    impl_(new stitched_morphology_impl(*builder.impl_))
 {}
 
-arb::morphology stitch_tree::morphology() const {
+arb::morphology stitched_morphology::morphology() const {
     return arb::morphology(impl_->stree);
 }
 
-label_dict stitch_tree::labels(const std::string& prefix) const {
+label_dict stitched_morphology::labels(const std::string& prefix) const {
     label_dict dict;
 
     auto i0 = impl_->id_to_segs.begin();
@@ -157,12 +179,13 @@ label_dict stitch_tree::labels(const std::string& prefix) const {
             util::make_range(i0, i1));
 
         dict.set(prefix+i0->first, std::move(r));
+        i0 = i1;
     }
 
     return dict;
 }
 
-region stitch_tree::stitch(const std::string& id) const {
+region stitched_morphology::stitch(const std::string& id) const {
     auto seg_ids = util::make_range(impl_->id_to_segs.equal_range(id));
     if (seg_ids.empty()) throw no_such_stitch(id);
 
@@ -170,5 +193,7 @@ region stitch_tree::stitch(const std::string& id) const {
         [&](region r, const auto& elem) { return join(std::move(r), reg::segment(elem.second)); },
         reg::nil(), seg_ids);
 }
+
+stitched_morphology::~stitched_morphology() = default;
 
 } // namespace arb

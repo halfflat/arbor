@@ -38,7 +38,7 @@ struct mstitch {
 };
 
 struct stitch_builder_impl;
-struct stitch_tree;
+struct stitched_morphology;
 
 struct stitch_builder {
     stitch_builder();
@@ -59,29 +59,30 @@ struct stitch_builder {
     stitch_builder& add(mstitch f, const std::string& parent_id, double along = 1.);
     stitch_builder& add(mstitch f, double along = 1.);
 
+    ~stitch_builder();
 private:
-    friend stitch_tree;
+    friend stitched_morphology;
     std::unique_ptr<stitch_builder_impl> impl_;
 };
 
 // From stitch builder construct morphology, region expressions.
 
-struct stitch_tree_impl;
+struct stitched_morphology_impl;
 
-struct stitch_tree {
-    stitch_tree() = delete;
-    stitch_tree(const stitch_builder&); // implicit
-    stitch_tree(stitch_builder&&); // implicit
+struct stitched_morphology {
+    stitched_morphology() = delete;
+    stitched_morphology(const stitch_builder&); // implicit
+    stitched_morphology(stitch_builder&&); // implicit
 
     arb::morphology morphology() const;
+    region stitch(const std::string& id) const;
 
     // Create labeled regions for each stitch with label equal to the stitch id, prepended by `prefix`.
     label_dict labels(const std::string& prefix="") const;
 
-    region stitch(const std::string& id) const;
-
+    ~stitched_morphology();
 private:
-    std::unique_ptr<stitch_tree_impl> impl_;
+    std::unique_ptr<stitched_morphology_impl> impl_;
 };
 
 } // namesapce arb
