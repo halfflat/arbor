@@ -242,7 +242,7 @@ public:
         ordered_forest f(std::move(of), get_allocator());
         node* sp_first = f.first_;
         f.first_ = nullptr;
-        return splice_impl(i.n_->parent_, i.n_->child_, sp_first);
+        return splice_impl(i.n_, i.n_->child_, sp_first);
     }
 
     // Insert item as first top-level tree.

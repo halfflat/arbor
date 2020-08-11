@@ -1,5 +1,6 @@
 #include <memory>
 #include <unordered_map>
+#include <vector>
 
 #include <arbor/morph/stitch.hpp>
 #include <arbor/morph/morphexcept.hpp>
@@ -9,7 +10,9 @@
 
 #include "util/ordered_forest.hpp"
 #include "util/maputil.hpp"
+#include "util/meta.hpp"
 #include "util/rangeutil.hpp"
+#include "util/transform.hpp"
 
 namespace arb {
 
@@ -141,7 +144,7 @@ struct stitched_morphology_impl {
             const std::string& id = id_node.first;
             auto iter = id_node.second;
 
-            while (iter) {
+            while (iter && iter->stitch_id==id) {
                 id_to_segs.insert({id, iter->seg_id});
                 iter = iter.child();
                 while (iter.next()) {
@@ -192,6 +195,13 @@ region stitched_morphology::stitch(const std::string& id) const {
     return util::foldl(
         [&](region r, const auto& elem) { return join(std::move(r), reg::segment(elem.second)); },
         reg::nil(), seg_ids);
+}
+
+std::vector<msize_t> stitched_morphology::segments(const std::string& id) const {
+    auto seg_ids = util::transform_view(util::make_range(impl_->id_to_segs.equal_range(id)), util::second);
+    if (seg_ids.empty()) throw no_such_stitch(id);
+
+    return std::vector<msize_t>(begin(seg_ids), end(seg_ids));
 }
 
 stitched_morphology::~stitched_morphology() = default;

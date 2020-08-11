@@ -59,6 +59,31 @@ struct simple_allocator {
 
     std::shared_ptr<std::size_t> n_alloc_, n_dealloc_;
 };
+
+template <typename T, typename A>
+::testing::AssertionResult forest_invariant(const ordered_forest<T, A>& f) {
+    // check parent-child confluence:
+
+    for (auto i = f.root_begin(); i!=f.root_end(); ++i) {
+        if (i.parent()) {
+            return ::testing::AssertionFailure() << "root node " << *i << " has parent " << *i.parent();
+        }
+    }
+
+    for (auto i = f.begin(); i!=f.end(); ++i) {
+        auto cb = f.child_begin(i);
+        auto ce = f.child_end(i);
+
+        for (auto j = cb; j!=ce; ++j) {
+            if (j.parent() != i) {
+                auto failure = ::testing::AssertionFailure() << "child node " << *j << " of " << *i << " is node ";
+                return j.parent()? (failure << *j.parent()): (failure << "(null)");
+            }
+        }
+    }
+    return ::testing::AssertionSuccess();
+}
+
 } // anonymous namespace
 
 TEST(ordered_forest, empty) {
@@ -86,6 +111,8 @@ TEST(ordered_forest, push) {
         f.push_child(i2, 5);
         f.push_child(i2, 4);
         f.push_front(1);
+
+        ASSERT_TRUE(forest_invariant(f));
 
         ASSERT_EQ(5u, f.size());
         EXPECT_EQ(10u, alloc.n_alloc()); // five nodes, five items.
@@ -128,6 +155,8 @@ TEST(ordered_forest, insert) {
         f.insert_after(c, 6);
         f.insert_after(c, 5);
 
+        ASSERT_TRUE(forest_invariant(f));
+
         ASSERT_EQ(6u, f.size());
         EXPECT_EQ(12u, alloc.n_alloc()); // six nodes, six items.
 
@@ -162,6 +191,8 @@ TEST(ordered_forest, insert) {
 TEST(ordered_forest, initializer_list) {
     ordered_forest<int> f = {1, {2, {4, 5, 6}}, 3};
     EXPECT_EQ(6u, f.size());
+
+    ASSERT_TRUE(forest_invariant(f));
 
     auto i = f.begin();
     ASSERT_TRUE(i);
@@ -260,12 +291,15 @@ TEST(ordered_forest, copy_move) {
     {
         of f({{1, {2, 3}}, {4, {5, {6, {7}}, 8}}, 9}, alloc);
         EXPECT_EQ(18u, alloc.n_alloc());
+        ASSERT_TRUE(forest_invariant(f));
 
         f1 = f;
+        ASSERT_TRUE(forest_invariant(f1));
         EXPECT_EQ(36u, alloc.n_alloc());
         EXPECT_FALSE(f.empty());
 
         of f2 = std::move(f);
+        ASSERT_TRUE(forest_invariant(f2));
         EXPECT_EQ(36u, alloc.n_alloc());
         EXPECT_TRUE(f.empty());
 
@@ -289,6 +323,7 @@ TEST(ordered_forest, copy_move) {
     of f3(other_alloc);
 
     f3 = std::move(f1);
+    ASSERT_TRUE(forest_invariant(f3));
     EXPECT_FALSE(f1.empty());
 
     EXPECT_EQ(36u, alloc.n_alloc());
@@ -302,17 +337,20 @@ TEST(ordered_forest, erase) {
     using of = ordered_forest<int, simple_allocator<int>>;
 
     of f({1, 2, {3, {4, {5, {6, 7}}, 8}}, 9}, alloc);
+    ASSERT_TRUE(forest_invariant(f));
     EXPECT_EQ(18u, alloc.n_alloc());
 
     auto two = std::find(f.begin(), f.end(), 2);
     f.erase_after(two);
 
+    ASSERT_TRUE(forest_invariant(f));
     EXPECT_EQ((of{1, 2, 4, {5, {6, 7}}, 8, 9}), f);
     EXPECT_EQ(2u, alloc.n_dealloc());
 
     auto five = std::find(f.begin(), f.end(), 5);
     f.erase_child(five);
 
+    ASSERT_TRUE(forest_invariant(f));
     EXPECT_EQ((of{1, 2, 4, {5, {7}}, 8, 9}), f);
     EXPECT_EQ(4u, alloc.n_dealloc());
 
@@ -323,6 +361,7 @@ TEST(ordered_forest, erase) {
     ASSERT_THROW(f.erase_after(seven), std::invalid_argument);
 
     f.erase_front();
+    ASSERT_TRUE(forest_invariant(f));
     EXPECT_EQ((of{2, 4, {5, {7}}, 8, 9}), f);
     EXPECT_EQ(6u, alloc.n_dealloc());
 
@@ -335,18 +374,25 @@ TEST(ordered_forest, prune) {
     using of = ordered_forest<int, simple_allocator<int>>;
 
     of f({1, 2, {3, {4, {5, {6, 7}}, 8}}, 9}, alloc);
+    ASSERT_TRUE(forest_invariant(f));
     EXPECT_EQ(18u, alloc.n_alloc());
     EXPECT_EQ(0u, alloc.n_dealloc());
 
     of p1 = f.prune_front();
+    ASSERT_TRUE(forest_invariant(f));
+    ASSERT_TRUE(forest_invariant(p1));
     EXPECT_EQ((of{2, {3, {4, {5, {6, 7}}, 8}}, 9}), f);
     EXPECT_EQ((of{1}), p1);
 
     of p2 = f.prune_after(std::find(f.begin(), f.end(), 4));
+    ASSERT_TRUE(forest_invariant(f));
+    ASSERT_TRUE(forest_invariant(p2));
     EXPECT_EQ((of{2, {3, {4, 8}}, 9}), f);
     EXPECT_EQ((of{{5, {6, 7}}}), p2);
 
     of p3 = f.prune_child(std::find(f.begin(), f.end(), 3));
+    ASSERT_TRUE(forest_invariant(f));
+    ASSERT_TRUE(forest_invariant(p3));
     EXPECT_EQ((of{2, {3, {8}}, 9}), f);
     EXPECT_EQ((of{4}), p3);
 
@@ -372,18 +418,21 @@ TEST(ordered_forest, graft) {
     auto j = f1.graft_after(f1.begin(), of{6, {7, {8}}});
 
     ASSERT_TRUE(j);
+    ASSERT_TRUE(forest_invariant(f1));
     EXPECT_EQ(7, *j);
     EXPECT_EQ((of{1, 6, {7, {8}}, {2, {3, 4}}, 5}), f1);
 
     j = f1.graft_child(std::find(f1.begin(), f1.end(), 2), of{9, 10});
 
     ASSERT_TRUE(j);
+    ASSERT_TRUE(forest_invariant(f1));
     EXPECT_EQ(10, *j);
     EXPECT_EQ((of{1, 6, {7, {8}}, {2, {9, 10, 3, 4}}, 5}), f1);
 
     j = f1.graft_front(of{{11, {12, 13}}});
 
     ASSERT_TRUE(j);
+    ASSERT_TRUE(forest_invariant(f1));
     EXPECT_EQ(11, *j);
     EXPECT_EQ((of{{11, {12, 13}}, 1, 6, {7, {8}}, {2, {9, 10, 3, 4}}, 5}), f1);
 
@@ -392,15 +441,23 @@ TEST(ordered_forest, graft) {
     of f3({3, 4}, alloc1);
     of f4({5, 6}, alloc2);
 
+    ASSERT_TRUE(forest_invariant(f2));
+    ASSERT_TRUE(forest_invariant(f3));
+    ASSERT_TRUE(forest_invariant(f4));
+
     EXPECT_EQ(8u, alloc1.n_alloc());
     EXPECT_EQ(0u, alloc1.n_dealloc());
     EXPECT_EQ(4u, alloc2.n_alloc());
 
     f2.graft_front(std::move(f3));
+    ASSERT_TRUE(forest_invariant(f2));
+    ASSERT_TRUE(forest_invariant(f3));
     EXPECT_EQ(8u, alloc1.n_alloc());
     EXPECT_EQ(0u, alloc1.n_dealloc());
 
     f2.graft_front(std::move(f4));
+    ASSERT_TRUE(forest_invariant(f2));
+    ASSERT_TRUE(forest_invariant(f4));
     EXPECT_EQ(12u, alloc1.n_alloc());
     EXPECT_EQ(0u, alloc1.n_dealloc());
     EXPECT_EQ(4u, alloc2.n_dealloc());
@@ -417,6 +474,11 @@ TEST(ordered_forest, swap) {
 
     of a_copy(a), b_copy(b);
 
+    ASSERT_TRUE(forest_invariant(a));
+    ASSERT_TRUE(forest_invariant(b));
+    ASSERT_TRUE(forest_invariant(a_copy));
+    ASSERT_TRUE(forest_invariant(b_copy));
+
     ASSERT_EQ(alloc1, a.get_allocator());
     ASSERT_EQ(alloc2, b.get_allocator());
     ASSERT_EQ(alloc1, a_copy.get_allocator());
@@ -425,6 +487,9 @@ TEST(ordered_forest, swap) {
     ASSERT_EQ(b_copy, b);
 
     swap(a, b);
+
+    ASSERT_TRUE(forest_invariant(a));
+    ASSERT_TRUE(forest_invariant(b));
     EXPECT_EQ(alloc2, a.get_allocator());
     EXPECT_EQ(alloc1, b.get_allocator());
     EXPECT_EQ(b_copy, a);

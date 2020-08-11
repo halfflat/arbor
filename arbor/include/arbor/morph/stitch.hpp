@@ -2,6 +2,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <arbor/morph/morphology.hpp>
 #include <arbor/morph/primitives.hpp>
@@ -76,6 +77,7 @@ struct stitched_morphology {
 
     arb::morphology morphology() const;
     region stitch(const std::string& id) const;
+    std::vector<msize_t> segments(const std::string& id) const;
 
     // Create labeled regions for each stitch with label equal to the stitch id, prepended by `prefix`.
     label_dict labels(const std::string& prefix="") const;
