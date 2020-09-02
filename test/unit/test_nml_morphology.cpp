@@ -1,4 +1,3 @@
-
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/place_pwlin.hpp>
 #include <arbor/morph/primitives.hpp>
@@ -157,6 +156,18 @@ R"~(
         <distal x="4.5" y="-5" z="5" diameter="0.5"/>
     </segment>
 </morphology>
+<morphology id="m5">
+    <!-- Two segments, meeting at root point p0,
+         [p0 p1] and [p0 p3], but in reverse order. -->
+    <segment id="1">
+        <parent segment="0" fractionAlong="0.0"/>
+        <distal x="4.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+    <segment id="0">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+</morphology>
 </neuroml>
 )~";
 
@@ -236,7 +247,224 @@ R"~(
         EXPECT_EQ(p2, seg1_segments[0].prox);
         EXPECT_EQ(p3, seg1_segments[0].dist);
     }
+    {
+        for (const char* m_name: {"m4", "m5"}) {
+            arbnml::morphology_data m4_or_5 = N.morphology(m_name).value();
+            label_dict labels;
+            labels.import(m4_or_5.segments, "seg:");
+            mprovider P(m4_or_5.morphology, labels);
+
+            mextent seg0_extent = thingify(reg::named("seg:0"), P);
+            ASSERT_EQ(1u, seg0_extent.size());
+
+            mextent seg1_extent = thingify(reg::named("seg:1"), P);
+            ASSERT_EQ(1u, seg1_extent.size());
+
+            place_pwlin G(P.morphology());
+            auto seg0_segments = G.segments(seg0_extent);
+            auto seg1_segments = G.segments(seg1_extent);
+
+            ASSERT_EQ(1u, seg0_segments.size());
+            EXPECT_EQ(p0, seg0_segments[0].prox);
+            EXPECT_EQ(p1, seg0_segments[0].dist);
+
+            ASSERT_EQ(1u, seg1_segments.size());
+            EXPECT_EQ(p0, seg1_segments[0].prox);
+            EXPECT_EQ(p3, seg1_segments[0].dist);
+        }
+    }
 }
 
+TEST(neuroml, segment_errors) {
+    using namespace arb;
 
-// also todo: parse neuroml embedded in another XML document.
+    // Points used in morphology definitions below.
+
+    std::string doc =
+R"~(
+<neuroml xmlns="http://www.neuroml.org/schema/neuroml2">
+<morphology id="no-proximal">
+    <!-- No proximal point for root segment -->
+    <segment id="0">
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+</morphology>
+<morphology id="no-such-parent">
+    <!-- Parent of segment 1 does not exist -->
+    <segment id="0">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+    <segment id="1">
+        <parent segment="2"/>
+        <distal x="4.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+</morphology>
+<morphology id="cyclic-dependency">
+    <!-- Segments 1, 2 3 form a cycle -->
+    <segment id="0" name="soma">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+    <segment id="1">
+        <parent segment="3"/>
+        <distal x="4.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+    <segment id="2">
+        <parent segment="1"/>
+        <distal x="5.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+    <segment id="3">
+        <parent segment="2"/>
+        <distal x="6.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+</morphology>
+<morphology id="duplicate-id">
+    <!-- Two segments with the same id -->
+    <segment id="0">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+    <segment id="1">
+        <parent segment="0" fractionAlong="0.0"/>
+        <distal x="4.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+    <segment id="1">
+        <parent segment="0" fractionAlong="0.0"/>
+        <distal x="7.5" y="-5" z="5" diameter="0.5"/>
+    </segment>
+</morphology>
+<morphology id="bad-segment-id">
+    <!-- Segment id is a negative number -->
+    <segment id="-1">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+</morphology>
+<morphology id="another-bad-segment-id">
+    <!-- Segment id is not a whole number -->
+    <segment id="1.6">
+        <proximal x="1" y="-2" z="3.5" diameter="8"/>
+        <distal x="3" y="-3.5" z="4" diameter="8.5"/>
+    </segment>
+</morphology>
+</neuroml>
+)~";
+
+    arbnml::neuroml N(doc);
+
+    EXPECT_THROW(N.morphology("no-proximal").value(), arbnml::bad_segment);
+    EXPECT_THROW(N.morphology("no-such-parent").value(), arbnml::bad_segment);
+    EXPECT_THROW(N.morphology("cyclic-dependency").value(), arbnml::cyclic_dependency);
+    EXPECT_THROW(N.morphology("duplicate-id").value(), arbnml::bad_segment);
+    EXPECT_THROW(N.morphology("bad-segment-id").value(), arbnml::bad_segment);
+    EXPECT_THROW(N.morphology("another-bad-segment-id").value(), arbnml::bad_segment);
+}
+
+TEST(neuroml, simple_groups) {
+    using namespace arb;
+
+    std::string doc =
+R"~(
+<neuroml xmlns="http://www.neuroml.org/schema/neuroml2">
+<morphology id="m1">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="1">
+        <parent segment="0"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="2">
+        <parent segment="1"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="group-a">
+        <member segment="0"/>
+    </segmentGroup>
+    <segmentGroup id="group-b">
+        <member segment="2"/>
+    </segmentGroup>
+    <segmentGroup id="group-c">
+        <member segment="2"/>
+        <member segment="1"/>
+    </segmentGroup>
+</morphology>
+<morphology id="m2">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="1">
+        <parent segment="0"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="2">
+        <parent segment="1"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="3">
+        <parent segment="2"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="group-a">
+        <!-- segments 0 and 2 -->
+        <member segment="0"/>
+        <include segmentGroup="group-b"/>
+    </segmentGroup>
+    <segmentGroup id="group-b">
+        <member segment="2"/>
+    </segmentGroup>
+    <segmentGroup id="group-c">
+        <!-- segments 0, 1 and 2 -->
+        <member segment="1"/>
+        <include segmentGroup="group-a"/>
+    </segmentGroup>
+    <segmentGroup id="group-d">
+        <!-- segments 0, 2 and 3 -->
+        <include segmentGroup="group-e"/>
+        <include segmentGroup="group-a"/>
+    </segmentGroup>
+    <segmentGroup id="group-e">
+        <member segment="3"/>
+    </segmentGroup>
+</morphology>
+</neuroml>
+)~";
+
+    arbnml::neuroml N(doc);
+
+    {
+        arbnml::morphology_data m1 = N.morphology("m1").value();
+        label_dict labels;
+        labels.import(m1.segments);
+        labels.import(m1.groups);
+        mprovider P(m1.morphology, labels);
+
+        EXPECT_TRUE(region_eq(P, "group-a", "0"));
+        EXPECT_TRUE(region_eq(P, "group-b", "2"));
+        EXPECT_TRUE(region_eq(P, "group-c", join(region("2"), region("1"))));
+    }
+    {
+        arbnml::morphology_data m2 = N.morphology("m2").value();
+        label_dict labels;
+        labels.import(m2.segments);
+        labels.import(m2.groups);
+        mprovider P(m2.morphology, labels);
+
+        EXPECT_TRUE(region_eq(P, "group-a", join(region("0"), region("2"))));
+        EXPECT_TRUE(region_eq(P, "group-c", join(region("0"), region("1"), region("2"))));
+        EXPECT_TRUE(region_eq(P, "group-d", join(region("0"), region("2"), region("3"))));
+    }
+}
+
+// TODO:
+// * test for neuroml not as top level element/with explicit namespace.
+// * test for segmentGroup errors (missing segments, includes; cyclic dependencies).
+// * test for path, subtree in segment groups once implemented. 

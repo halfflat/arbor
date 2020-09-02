@@ -34,4 +34,24 @@ bad_segment::bad_segment(unsigned long long segment_id, unsigned line):
     line(line)
 {}
 
+bad_segment_group::bad_segment_group(const std::string& group_id, unsigned line):
+    neuroml_exception(
+        fmt_error(
+            "bad morphology segmentGroup: ",
+            "segmentGroup id "+(group_id.empty()? "unknown": "\""+group_id+"\""),
+            line)),
+    group_id(group_id),
+    line(line)
+{}
+
+cyclic_dependency::cyclic_dependency(const std::string& id, unsigned line):
+    neuroml_exception(
+        fmt_error(
+            "cyclic dependency: ",
+            "element id \""+id+"\"",
+            line)),
+    id(id),
+    line(line)
+{}
+
 } // namespace arbnml

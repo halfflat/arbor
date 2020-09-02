@@ -46,4 +46,22 @@ struct bad_segment: neuroml_exception {
     unsigned line;
 };
 
+// NeuroML morphology error: improper segmentGroup data, e.g. malformed
+// element data, missing referenced segments or groups, etc.
+
+struct bad_segment_group: neuroml_exception {
+    bad_segment_group(const std::string& group_id, unsigned line = 0);
+    std::string group_id;
+    unsigned line;
+};
+
+// A segment or segmentGroup ultimately refers to itself via `parent`
+// or `include` elements respectively.
+
+struct cyclic_dependency: neuroml_exception {
+    cyclic_dependency(const std::string& id, unsigned line = 0);
+    std::string id;
+    unsigned line;
+};
+
 } // namespace arbnml
