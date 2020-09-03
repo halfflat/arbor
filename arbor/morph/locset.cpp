@@ -240,6 +240,44 @@ std::ostream& operator<<(std::ostream& o, const most_proximal_& x) {
     return o << "(proximal \"" << x.reg << "\")";
 }
 
+// Maximal points of a locset.
+
+struct maximal_: locset_tag {
+    explicit maximal_(locset locs): locs(std::move(locs)) {}
+    locset locs;
+};
+
+locset maximal(locset locs) {
+    return locset(maximal_{std::move(locs)});
+}
+
+mlocation_list thingify_(const maximal_& n, const mprovider& p) {
+    return maxset(p.morphology(), thingify(n.locs, p));
+}
+
+std::ostream& operator<<(std::ostream& o, const maximal_& x) {
+    return o << "(maximal \"" << x.locs << "\")";
+}
+
+// Minimal points of a locset.
+
+struct minimal_: locset_tag {
+    explicit minimal_(locset locs): locs(std::move(locs)) {}
+    locset locs;
+};
+
+locset minimal(locset locs) {
+    return locset(minimal_{std::move(locs)});
+}
+
+mlocation_list thingify_(const minimal_& n, const mprovider& p) {
+    return minset(p.morphology(), thingify(n.locs, p));
+}
+
+std::ostream& operator<<(std::ostream& o, const minimal_& x) {
+    return o << "(minimal \"" << x.locs << "\")";
+}
+
 // Boundary points of a region.
 //
 // The boundary points of a region R are defined as the most proximal

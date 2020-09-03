@@ -6,7 +6,9 @@
 #include <vector>
 
 #include <arbor/assert.hpp>
+#include <arbor/morph/locset.hpp>
 #include <arbor/morph/primitives.hpp>
+#include <arbor/morph/region.hpp>
 #include <arbor/morph/stitch.hpp>
 #include <arbor/util/optional.hpp>
 #include <arbor/util/variant.hpp>
@@ -139,8 +141,8 @@ struct group_info {
     std::string id;
     std::vector<non_negative> segments;
     std::vector<std::string> includes;
-    // paths
-    // subtree
+    std::vector<std::pair<non_negative, non_negative>> paths;
+    std::vector<non_negative> subtrees;
 
     // Data for error reporting:
     unsigned line = 0;
@@ -247,8 +249,24 @@ void build_segment_groups(morphology_data& M, std::vector<group_info>& groups) {
 
         for (auto seg_id: group.segments) {
             auto opt_reg = M.segments.region(std::to_string(seg_id));
-            if (!opt_reg) throw bad_segment(seg_id, group.line);
+            if (!opt_reg) throw bad_segment_group(group.id, group.line);
             r = join(std::move(r), *opt_reg);
+        }
+
+        for (auto path: group.paths) {
+            auto opt_from = M.segments.region(std::to_string(path.first));
+            if (!opt_from) throw bad_segment_group(group.id, group.line);
+            auto opt_to = M.segments.region(std::to_string(path.second));
+            if (!opt_to) throw bad_segment_group(group.id, group.line);
+
+            r = join(std::move(r), arb::reg::between(arb::ls::most_proximal(*opt_from), arb::ls::most_distal(*opt_to)));
+        }
+
+        for (auto seg: group.subtrees) {
+            auto opt_from = M.segments.region(std::to_string(seg));
+            if (!opt_from) throw bad_segment_group(group.id, group.line);
+
+            r = join(std::move(r), arb::reg::distal_interval(arb::ls::most_distal(*opt_from), INFINITY));
         }
 
         for (auto j: includes_by_index.at(index)) {
@@ -277,6 +295,7 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
 
     for (auto n: ctx.query(morph, "./nml:segment")) {
         neuroml_segment seg;
+        int line = n.line(); // for error context!
 
         try {
             seg.id = -1;
@@ -285,12 +304,14 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
 
             auto result = ctx.query(n, q_parent);
             if (!result.empty()) {
+                line = result[0].line();
                 seg.parent_id = result[0].prop<non_negative>("segment");
                 seg.along = result[0].prop<double>("fractionAlong", 1.0);
             }
 
             result = ctx.query(n, q_proximal);
             if (!result.empty()) {
+                line = result[0].line();
                 double x = result[0].prop<double>("x");
                 double y = result[0].prop<double>("y");
                 double z = result[0].prop<double>("z");
@@ -304,6 +325,7 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
 
             result = ctx.query(n, q_distal);
             if (!result.empty()) {
+                line = result[0].line();
                 double x = result[0].prop<double>("x");
                 double y = result[0].prop<double>("y");
                 double z = result[0].prop<double>("z");
@@ -317,7 +339,7 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
             }
         }
         catch (parse_error& e) {
-            throw bad_segment(seg.id, n.line());
+            throw bad_segment(seg.id, line);
         }
 
         seg.line = n.line();
@@ -355,23 +377,60 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
     // TODO: precompile xpath queries for following:
     const char* q_member = "./nml:member";
     const char* q_include = "./nml:include";
+    const char* q_path = "./nml:path";
+    const char* q_from = "./nml:from";
+    const char* q_to = "./nml:to";
+    const char* q_subtree = "./nml:subTree";
 
     std::vector<group_info> groups;
 
     for (auto n: ctx.query(morph, "./nml:segmentGroup")) {
         group_info group;
+        int line = n.line(); // for error context!
 
         try {
             group.id = n.prop<std::string>("id");
             for (auto elem: ctx.query(n, q_member)) {
+                line = elem.line();
                 group.segments.push_back(elem.prop<non_negative>("segment"));
             }
             for (auto elem: ctx.query(n, q_include)) {
+                line = elem.line();
                 group.includes.push_back(elem.prop<std::string>("segmentGroup"));
+            }
+            for (auto elem: ctx.query(n, q_path)) {
+                line = elem.line();
+                auto froms = ctx.query(elem, q_from);
+                auto tos = ctx.query(elem, q_to);
+                // Schema says its okay to have zero 'from' or 'to' elements in
+                // a path, but what does that even mean?
+                if (froms.empty() || tos.empty()) {
+                    throw bad_segment_group(group.id, line);
+                }
+
+                line = froms[0].line();
+                non_negative seg_from = froms[0].prop<non_negative>("segment");
+
+                line = tos[0].line();
+                non_negative seg_to = tos[0].prop<non_negative>("segment");
+
+                group.paths.push_back({seg_from, seg_to});
+            }
+            for (auto elem: ctx.query(n, q_subtree)) {
+                // Schema says we can have a subTree _to_ a segment instead.
+                // It is not documented what this would mean, so we're going
+                // to ignore that option for now.
+                line = elem.line();
+                auto froms = ctx.query(elem, q_from);
+                if (froms.empty()) throw bad_segment_group(group.id, line);
+
+                line = froms[0].line();
+                non_negative seg_from = froms[0].prop<non_negative>("segment");
+                group.subtrees.push_back(seg_from);
             }
         }
         catch (parse_error& e) {
-            throw bad_segment_group(group.id, n.line());
+            throw bad_segment_group(group.id, line);
         }
 
         group.line = n.line();

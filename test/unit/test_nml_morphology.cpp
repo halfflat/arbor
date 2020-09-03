@@ -464,7 +464,113 @@ R"~(
     }
 }
 
+TEST(neuroml, group_errors) {
+    using namespace arb;
+
+    std::string doc =
+R"~(
+<neuroml xmlns="http://www.neuroml.org/schema/neuroml2">
+<morphology id="no-such-segment">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="group">
+        <member segment="1"/>
+    </segmentGroup>
+</morphology>
+<morphology id="no-such-group">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="group">
+        <member segment="0"/>
+        <include segmentGroup="other-group"/>
+    </segmentGroup>
+</morphology>
+<morphology id="cyclic-dependency">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="group">
+        <include segmentGroup="other-group"/>
+    </segmentGroup>
+    <segmentGroup id="other-group">
+        <include segmentGroup="group"/>
+    </segmentGroup>
+</morphology>
+</neuroml>
+)~";
+
+    arbnml::neuroml N(doc);
+
+    EXPECT_THROW(N.morphology("no-such-segment").value(), arbnml::bad_segment_group);
+    EXPECT_THROW(N.morphology("no-such-group").value(), arbnml::bad_segment_group);
+    EXPECT_THROW(N.morphology("cyclic-dependency").value(), arbnml::cyclic_dependency);
+}
+
+
+TEST(neuroml, group_paths) {
+    using namespace arb;
+
+    std::string doc =
+R"~(
+<neuroml xmlns="http://www.neuroml.org/schema/neuroml2">
+<morphology id="m1">
+    <segment id="0">
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="1">
+        <parent segment="0" fractionAlong="0.5"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segment id="2">
+        <parent segment="1"/>
+        <proximal x="1" y="1" z="1" diameter="1"/>
+        <distal x="2" y="2" z="2" diameter="2"/>
+    </segment>
+    <segmentGroup id="path01">
+        <path>
+            <from segment="0"/>
+            <to segment="1"/>
+        </path>
+    </segmentGroup>
+    <segmentGroup id="path12">
+        <path>
+            <from segment="1"/>
+            <to segment="2"/>
+        </path>
+    </segmentGroup>
+    <segmentGroup id="path10">
+        <path>
+            <from segment="1"/>
+            <to segment="0"/>
+        </path>
+    </segmentGroup>
+</morphology>
+</neuroml>
+)~";
+
+    arbnml::neuroml N(doc);
+
+    {
+        arbnml::morphology_data m1 = N.morphology("m1").value();
+        label_dict labels;
+        labels.import(m1.segments);
+        labels.import(m1.groups);
+        mprovider P(m1.morphology, labels);
+
+        EXPECT_TRUE(region_eq(P, "path01", join(reg::cable(0, 0, 1), region("1"))));
+        EXPECT_FALSE(region_eq(P, "path01", join(region("0"), region("1"))));
+        EXPECT_TRUE(region_eq(P, "path12", join(region("1"), region("2"))));
+        EXPECT_TRUE(region_eq(P, "path10", reg::nil()));
+    }
+}
+
 // TODO:
 // * test for neuroml not as top level element/with explicit namespace.
-// * test for segmentGroup errors (missing segments, includes; cyclic dependencies).
-// * test for path, subtree in segment groups once implemented. 
+// * test for subtree in segment groups.
