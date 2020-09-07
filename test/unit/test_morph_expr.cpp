@@ -454,6 +454,7 @@ TEST(region, thingify_simple_morphologies) {
         auto reg4_ = distal_interval(end1_, 100);
         auto reg5_ = distal_interval(start1_, 0);
         auto reg6_ = proximal_interval(start1_, 0);
+        auto reg7_ = proximal_interval(start1_, INFINITY);
 
         EXPECT_TRUE(region_eq(mp, segment(3), mcable_list{{2,0,0}}));
         EXPECT_TRUE(region_eq(mp, segment(4), mcable_list{{2,0,1}}));
@@ -469,6 +470,7 @@ TEST(region, thingify_simple_morphologies) {
         EXPECT_TRUE(region_eq(mp, reg4_, mcable_list{{1,1,1}}));
         EXPECT_TRUE(region_eq(mp, reg5_, mcable_list{{1,0,0}}));
         EXPECT_TRUE(region_eq(mp, reg6_, mcable_list{{1,0,0}}));
+        EXPECT_TRUE(region_eq(mp, reg7_, mcable_list{{0,0,1},{1,0,0}}));
     }
 }
 

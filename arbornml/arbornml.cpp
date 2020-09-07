@@ -1,8 +1,7 @@
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
-
-#include <arbor/util/optional.hpp>
 
 #include <arbornml/arbornml.hpp>
 #include <arbornml/nmlexcept.hpp>
@@ -10,9 +9,8 @@
 #include "parse_morphology.hpp"
 #include "xmlwrap.hpp"
 
-using ::arb::util::optional;
-using ::arb::util::nullopt;
-using ::arb::util::just;
+using std::optional;
+using std::nullopt;
 
 namespace arbnml {
 
@@ -78,10 +76,10 @@ optional<morphology_data> neuroml::morphology(const std::string& morph_id) const
     auto ctx = impl_->make_context();
     auto matches = ctx.query("//nml:neuroml/nml:morphology[@id="+xpath_escape(morph_id)+"]");
 
-    return matches.empty()? nullopt: just(parse_morphology_element(ctx, matches[0]));
+    return matches.empty()? nullopt: optional(parse_morphology_element(ctx, matches[0]));
 }
 
-arb::util::optional<morphology_data> neuroml::cell_morphology(const std::string& cell_id) const {
+optional<morphology_data> neuroml::cell_morphology(const std::string& cell_id) const {
     xml_error_scope err;
     auto ctx = impl_->make_context();
     auto matches = ctx.query(

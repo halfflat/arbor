@@ -1,3 +1,5 @@
+#include <algorithm>
+#include <optional>
 #include <numeric>
 #include <stack>
 #include <string>
@@ -10,8 +12,7 @@
 #include <arbor/morph/primitives.hpp>
 #include <arbor/morph/region.hpp>
 #include <arbor/morph/stitch.hpp>
-#include <arbor/util/optional.hpp>
-#include <arbor/util/variant.hpp>
+#include <arbor/util/expected.hpp>
 
 #include <arbornml/arbornml.hpp>
 #include <arbornml/nmlexcept.hpp>
@@ -19,29 +20,12 @@
 #include "parse_morphology.hpp"
 #include "xmlwrap.hpp"
 
-using ::arb::util::optional;
-using ::arb::util::nullopt;
-using ::arb::util::just;
-using ::arb::util::variant;
-using ::arb::region;
+using std::optional;
+using arb::region;
+using arb::util::expected;
+using arb::util::unexpected;
 
 namespace arbnml {
-
-// Q&D error return class.
-
-template <typename V, typename Err>
-struct either: ::arb::util::variant<V, Err> {
-    template <typename X, typename = std::enable_if_t<!std::is_same<either, std::decay_t<X>>::value>>
-    either(X&& x): ::arb::util::variant<V, Err>(std::forward<X>(x)) {}
-
-    explicit operator bool() const { return ::arb::util::get_if<0>(*this); }
-
-    const V& get() const { return ::arb::util::get<0>(*this); }
-    V& get() { return ::arb::util::get<0>(*this); }
-
-    const Err& error() const { return get<1>(*this); }
-    Err& error() { return ::arb::util::get<1>(*this); }
-};
 
 // Box is a container of size 0 or 1.
 
@@ -57,30 +41,53 @@ struct box {
 
     box() = default;
     box(const X& x): x(x) {}
+    box(X&& x): x(std::move(x)) {}
 
-    std::size_t size() { return !!x; }
+    std::size_t size() const { return !empty(); }
+    bool empty() const { return !x; }
 };
+
+// Merge two sorted sequences, discarding duplicate values.
+
+template <typename Input1, typename Input2, typename Output>
+void unique_merge(Input1 i1, Input1 end1, Input2 i2, Input2 end2, Output out) {
+    while (i1!=end1 || i2!=end2) {
+        if (i1!=end1) {
+            while (i2!=end2 && *i2==*i1) ++i2;
+        }
+
+        if (i2==end2 || (i1!=end1 && !(*i2<*i1))) {
+            const auto& v = *i1++;
+            *out++ = v;
+            while (i1!=end1 && *i1==v) ++i1;
+        }
+        else {
+            const auto& v = *i2++;
+            *out++ = v;
+            while (i2!=end2 && *i2==v) ++i2;
+        }
+    }
+}
 
 // Return vector of depths; sorting object collection by depth will
 // give a topological order.
 //
-// The functional Inset takes a reference to an object and returns
-// a range or collection of indices to that object's precedessors.
+// The functional Inset takes an index into the collection of objects,
+// and returns a range or collection of indices to that object's precedessors.
 //
 // If a cycle is encountered, return detected_cycle{i} where i
 // is the index of an item in the cycle.
 
 struct cycle_detected { std::size_t index; };
 
-template <typename X, typename Inset>
-either<std::vector<std::size_t>, cycle_detected> topological_sort(const std::vector<X>& objects, Inset inset) {
+template <typename Inset>
+expected<std::vector<std::size_t>, cycle_detected> topological_sort(std::size_t n, Inset inset) {
     using std::begin;
     using std::end;
 
     constexpr std::size_t unknown = -1;
     constexpr std::size_t cycle = -2;
 
-    std::size_t n = objects.size();
     std::vector<std::size_t> depth(n, unknown);
     std::stack<std::size_t> stack;
 
@@ -95,11 +102,11 @@ either<std::vector<std::size_t>, cycle_detected> topological_sort(const std::vec
             std::size_t d = 0;
             bool resolve = true;
 
-            auto in = inset(objects[j]);
+            auto in = inset(j);
             for (auto k = begin(in); k!=end(in); ++k) {
                 switch (depth[*k]) {
                 case cycle:
-                    return cycle_detected{*k};
+                    return unexpected(cycle_detected{*k});
                 case unknown:
                     depth[*k] = cycle;
                     stack.push(*k);
@@ -120,6 +127,7 @@ either<std::vector<std::size_t>, cycle_detected> topological_sort(const std::vec
     return depth;
 }
 
+// Internal representations of NeuroML segment and segmentGroup data:
 
 struct neuroml_segment {
     // Morhpological data:
@@ -137,66 +145,223 @@ struct neuroml_segment {
     std::size_t tdepth = 0;
 };
 
-struct group_info {
-    std::string id;
-    std::vector<non_negative> segments;
-    std::vector<std::string> includes;
-    std::vector<std::pair<non_negative, non_negative>> paths;
-    std::vector<non_negative> subtrees;
+struct neuroml_segment_group_subtree {
+    // Interval determined by segmend ids.
+    // Represents both `<path>` and `<subTree>` elements.
+    optional<non_negative> from, to;
 
     // Data for error reporting:
     unsigned line = 0;
-
-    // Topological depth:
-    std::size_t tdepth = 0;
 };
 
-static arb::stitched_morphology construct_morphology(std::vector<neuroml_segment>& segs) {
+struct neuroml_segment_group_info {
+    std::string id;
+    std::vector<non_negative> segments;
+    std::vector<std::string> includes;
+    std::vector<neuroml_segment_group_subtree> subtrees;
+
+    // Data for error reporting:
+    unsigned line = 0;
+};
+
+// Processing of parsed segment/segmentGroup data:
+
+struct neuroml_segment_tree {
+    // Segments in topological order:
+    auto begin() const { return segments_.begin(); }
+    auto end() const { return segments_.end(); }
+
+    // How many segments?
+    std::size_t size() const { return segments_.size(); }
+    bool empty() const { return segments_.empty(); }
+
+    // Segment by id:
+    const neuroml_segment operator[](non_negative id) const {
+        return segments_.at(index_.at(id));
+    }
+
+    // Children of segment with id.
+    const std::vector<non_negative>& children(non_negative id) const {
+        return children_.at(id);
+    }
+
+    // Construct from vector of segments. Will happily throw if
+    // something doesn't add up.
+    neuroml_segment_tree(std::vector<neuroml_segment> segs):
+        segments_(std::move(segs))
+    {
+        if (segments_.empty()) return;
+        const std::size_t n_seg = segments_.size();
+
+        // Build index, throw on duplicate id.
+        for (std::size_t i = 0; i<n_seg; ++i) {
+            if (!index_.insert({segments_[i].id, i}).second) {
+                throw bad_segment(segments_[i].id, segments_[i].line);
+            }
+        }
+
+        // Check parent relationship is sound.
+        for (const auto& s: segments_) {
+            if (s.parent_id && !index_.count(*s.parent_id)) {
+                throw bad_segment(s.id, s.line); // No such parent id.
+            }
+        }
+
+        // Perform topological sort.
+        auto inset = [this](std::size_t i) {
+            auto& s = segments_[i];
+            return s.parent_id? box{index_.at(*s.parent_id)}: box<std::size_t>{};
+        };
+        if (auto depths = topological_sort(n_seg, inset)) {
+            const auto&d = depths.value();
+            for (std::size_t i = 0; i<n_seg; ++i) {
+                segments_[i].tdepth = d[i];
+            }
+        }
+        else {
+            const auto& seg = segments_[depths.error().index];
+            throw cyclic_dependency(nl_to_string(seg.id), seg.line);
+        }
+        std::sort(segments_.begin(), segments_.end(), [](auto& a, auto& b) { return a.tdepth<b.tdepth; });
+
+        // Check for multiple roots:
+        if (n_seg>1 && segments_[1].tdepth==0) throw bad_segment(segments_[1].id, segments_[1].line);
+
+        // Update index:
+        for (std::size_t i = 0; i<n_seg; ++i) {
+            index_.at(segments_[i].id) = i;
+        }
+
+        // Build child tree:
+        for (const auto& seg: segments_) {
+            if (seg.parent_id) {
+                children_[*seg.parent_id].push_back(seg.id);
+            }
+        }
+    }
+
+private:
+    std::vector<neuroml_segment> segments_;
+    std::unordered_map<non_negative, std::size_t> index_;
+    std::unordered_map<non_negative, std::vector<non_negative>> children_;
+};
+
+std::unordered_map<std::string, std::vector<non_negative>> evaluate_segment_groups(
+    std::vector<neuroml_segment_group_info> groups,
+    const neuroml_segment_tree& segtree)
+{
+    const std::size_t n_group = groups.size();
+
+    // Expand subTree/path specifications:
+    for (auto& g: groups) {
+        unsigned line = g.line;
+        try {
+            for (auto& subtree: g.subtrees) {
+                line = subtree.line;
+
+                if (!subtree.from && !subtree.to) {
+                    // Matches all segments:
+                    for (auto& seg: segtree) {
+                        g.segments.push_back(seg.id);
+                    }
+                }
+                else if (!subtree.to) {
+                    // Add 'from' and all of its descendents.
+                    std::stack<non_negative> pending;
+                    pending.push(*subtree.to);
+
+                    while (!pending.empty()) {
+                        auto top = pending.top();
+                        pending.pop();
+
+                        g.segments.push_back(top);
+                        for (auto id: segtree.children(top)) {
+                            pending.push(id);
+                        }
+                    }
+                }
+                else {
+                    for (auto opt_id = subtree.to; opt_id; opt_id = segtree[*opt_id].parent_id) {
+                        g.segments.push_back(*opt_id);
+                    }
+                }
+            }
+        }
+        catch (...) {
+            throw bad_segment_group(g.id, line);
+        }
+    }
+
+    // Build index, throw on duplicate id.
+    std::unordered_map<std::string, std::size_t> index;
+    for (std::size_t i = 0; i<n_group; ++i) {
+        if (!index.insert({groups[i].id, i}).second) {
+            throw bad_segment_group(groups[i].id, groups[i].line);
+        }
+    }
+
+    // Build group index -> indices of included groups map.
+    std::vector<std::vector<std::size_t>> index_to_included_indices;
+    for (std::size_t i = 0; i<n_group; ++i) {
+        const auto& includes = groups[i].includes;
+        index_to_included_indices[i].reserve(includes.size());
+        for (auto& id: includes) {
+            index_to_included_indices[i].push_back(index.at(id));
+        }
+    }
+
+    // Get topological order wrt include relationship.
+    std::vector<std::size_t> topo_order(n_group);
+    if (auto depths = topological_sort(n_group, [&](auto i) { return index_to_included_indices[i]; })) {
+        const auto& d = depths.value();
+        std::iota(topo_order.begin(), topo_order.end(), std::size_t(0));
+        std::sort(topo_order.begin(), topo_order.end(), [&d](auto& a, auto& b) { return d[a]<d[b]; });
+    }
+    else {
+        const auto& group = groups[depths.error().index];
+        throw cyclic_dependency(group.id, group.line);
+    }
+
+    // Accumulate included group segments, following topological order.
+    for (auto i: topo_order) {
+        auto& g = groups[i];
+        std::sort(g.segments.begin(), g.segments.end());
+
+        if (index_to_included_indices[i].empty()) {
+            g.segments.erase(std::unique(g.segments.begin(), g.segments.end()), g.segments.end());
+        }
+        else {
+            std::vector<non_negative> merged;
+            for (auto j: index_to_included_indices[i]) {
+                merged.clear();
+                unique_merge(g.segments.begin(), g.segments.end(),
+                    groups[j].segments.begin(), groups[j].segments.end(), std::back_inserter(merged));
+                std::swap(g.segments, merged);
+            }
+        }
+    }
+
+    // Move final segment lists into map.
+    std::unordered_map<std::string, std::vector<non_negative>> group_seg_map;
+    for (auto& g: groups) {
+        group_seg_map[g.id] = std::move(g.segments);
+    }
+
+    return group_seg_map;
+}
+
+arb::stitched_morphology construct_morphology(const neuroml_segment_tree& segtree) {
     arb::stitch_builder builder;
-    if (segs.empty()) return arb::stitched_morphology{builder};
+    if (segtree.empty()) return arb::stitched_morphology{builder};
 
-    // Sort segments topologically with respect to parent relationship.
+    // Construct result from topologically sorted segments.
 
-    std::unordered_map<non_negative, non_negative> id_to_index;
-    for (std::size_t i = 0; i<segs.size(); ++i) {
-        auto iter_success = id_to_index.insert({segs[i].id, (non_negative)i});
-        if (!iter_success.second) {
-            throw bad_segment(segs[i].id, segs[i].line); // Duplicate id.
-        }
-    }
-
-    for (const auto& s: segs) {
-        if (s.parent_id && !id_to_index.count(*s.parent_id)) {
-            throw bad_segment(s.id, s.line); // No such parent id.
-        }
-    }
-
-    auto ts_result = topological_sort(segs,
-        [&id_to_index](const neuroml_segment& s) {
-            return s.parent_id? box<non_negative>{id_to_index.at(*s.parent_id)}: box<non_negative>{}; });
-
-    if (!ts_result) {
-        auto& seg = segs[ts_result.error().index];
-        throw cyclic_dependency(std::to_string(seg.id), seg.line);
-    }
-    const std::vector<std::size_t>& depth = ts_result.get();
-
-    for (std::size_t i = 0; i<segs.size(); ++i) {
-        segs[i].tdepth = depth[i];
-    }
-    std::sort(segs.begin(), segs.end(), [](auto& a, auto& b) { return a.tdepth<b.tdepth; });
-
-    // Check for multiple roots:
-    if (segs.size()>1 && segs[1].tdepth==0) throw bad_segment(segs[1].id, segs[1].line);
-
-    // Construct result from sorted segments.
-
-    for (auto& s: segs) {
-        arb::mstitch stitch(std::to_string(s.id), s.distal);
+    for (auto& s: segtree) {
+        arb::mstitch stitch(nl_to_string(s.id), s.distal);
         stitch.prox = s.proximal;
 
         if (s.parent_id) {
-            builder.add(stitch, std::to_string(s.parent_id.value()), s.along);
+            builder.add(stitch, nl_to_string(s.parent_id.value()), s.along);
         }
         else {
             builder.add(stitch);
@@ -206,86 +371,10 @@ static arb::stitched_morphology construct_morphology(std::vector<neuroml_segment
     return arb::stitched_morphology(std::move(builder));
 }
 
-void build_segment_groups(morphology_data& M, std::vector<group_info>& groups) {
-    std::vector<region> group_region(groups.size());
-
-    // Sort groups topologically with respect to include relationship.
-
-    std::unordered_map<std::string, std::size_t> id_to_index;
-    std::vector<std::vector<std::size_t>> includes_by_index(groups.size());
-
-    for (std::size_t i = 0; i<groups.size(); ++i) {
-        auto iter_success = id_to_index.insert({groups[i].id, i});
-        if (!iter_success.second) {
-            throw bad_segment_group(groups[i].id, groups[i].line); // Duplicate id.
-        }
-    }
-    for (std::size_t i = 0; i<groups.size(); ++i) {
-        for (const std::string& include: groups[i].includes) {
-            auto iter = id_to_index.find(include);
-            if (iter==id_to_index.end()) throw bad_segment_group(include, groups[i].line);
-            includes_by_index[i].push_back(iter->second);
-        }
-    }
-
-    auto ts_result = topological_sort(groups,
-        [&id_to_index, includes_by_index](const group_info& g) {
-            return includes_by_index.at(id_to_index.at(g.id)); });
-
-    if (!ts_result) {
-        auto& group = groups[ts_result.error().index];
-        throw cyclic_dependency(group.id, group.line);
-    }
-
-    const std::vector<std::size_t>& depth = ts_result.get();
-
-    std::vector<std::size_t> topo_order(groups.size());
-    std::iota(topo_order.begin(), topo_order.end(), std::size_t(0));
-    std::sort(topo_order.begin(), topo_order.end(), [&depth](auto& a, auto& b) { return depth[a]<depth[b]; });
-
-    for (auto index: topo_order) {
-        const auto& group = groups[index];
-        region r;
-
-        for (auto seg_id: group.segments) {
-            auto opt_reg = M.segments.region(std::to_string(seg_id));
-            if (!opt_reg) throw bad_segment_group(group.id, group.line);
-            r = join(std::move(r), *opt_reg);
-        }
-
-        for (auto path: group.paths) {
-            auto opt_from = M.segments.region(std::to_string(path.first));
-            if (!opt_from) throw bad_segment_group(group.id, group.line);
-            auto opt_to = M.segments.region(std::to_string(path.second));
-            if (!opt_to) throw bad_segment_group(group.id, group.line);
-
-            r = join(std::move(r), arb::reg::between(arb::ls::most_proximal(*opt_from), arb::ls::most_distal(*opt_to)));
-        }
-
-        for (auto seg: group.subtrees) {
-            auto opt_from = M.segments.region(std::to_string(seg));
-            if (!opt_from) throw bad_segment_group(group.id, group.line);
-
-            r = join(std::move(r), arb::reg::distal_interval(arb::ls::most_distal(*opt_from), INFINITY));
-        }
-
-        for (auto j: includes_by_index.at(index)) {
-            r = join(std::move(r), group_region.at(j));
-        }
-
-        group_region[index] = r;
-        M.groups.set(group.id, std::move(r));
-    }
-}
-
 morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
     morphology_data M;
-
     M.id = morph.prop<std::string>("id", std::string{});
 
-    // NeuroML schema specifies that segment ids must be non-negative integers
-    // of arbitrary magnitude, but we attempt to parse them as unsigned long long
-    // values, and will throw an exception if they do not fit in the range.
     std::vector<neuroml_segment> segments;
 
     // TODO: precompile xpath queries for nml:distal, nml:proximal, nml:parent.
@@ -348,31 +437,8 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
 
     if (segments.empty()) return M;
 
-    arb::stitched_morphology stitched = construct_morphology(segments);
-    M.morphology = stitched.morphology();
-    M.segments = stitched.labels();
-
-    // Collate 'name' attributes for segments: associate each name
-    // with the corresponding segments in a region expression.
-
-    std::unordered_multimap<std::string, non_negative> name_to_ids;
-    std::unordered_set<std::string> names;
-
-    for (auto& s: segments) {
-        if (!s.name.empty()) {
-            name_to_ids.insert({s.name, s.id});
-            names.insert(s.name);
-        }
-    }
-
-    for (const auto& n: names) {
-        arb::region r;
-        auto ids = name_to_ids.equal_range(n);
-        for (auto i = ids.first; i!=ids.second; ++i) {
-            r = join(std::move(r), M.segments.regions().at(std::to_string(i->second)));
-        }
-        M.named_segments.set(n, std::move(r));
-    }
+    // Compute tree now to save further parsing if something goes wrong.
+    neuroml_segment_tree segtree(std::move(segments));
 
     // TODO: precompile xpath queries for following:
     const char* q_member = "./nml:member";
@@ -382,10 +448,10 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
     const char* q_to = "./nml:to";
     const char* q_subtree = "./nml:subTree";
 
-    std::vector<group_info> groups;
+    std::vector<neuroml_segment_group_info> groups;
 
     for (auto n: ctx.query(morph, "./nml:segmentGroup")) {
-        group_info group;
+        neuroml_segment_group_info group;
         int line = n.line(); // for error context!
 
         try {
@@ -398,35 +464,32 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
                 line = elem.line();
                 group.includes.push_back(elem.prop<std::string>("segmentGroup"));
             }
-            for (auto elem: ctx.query(n, q_path)) {
+
+            // Treat `<path>` and `<subTree>` identically:
+            auto parse_subtree_elem = [&](auto& elem) {
                 line = elem.line();
                 auto froms = ctx.query(elem, q_from);
                 auto tos = ctx.query(elem, q_to);
-                // Schema says its okay to have zero 'from' or 'to' elements in
-                // a path, but what does that even mean?
-                if (froms.empty() || tos.empty()) {
-                    throw bad_segment_group(group.id, line);
+
+                neuroml_segment_group_subtree sub;
+                sub.line = line;
+                if (!froms.empty()) {
+                    line = froms[0].line();
+                    sub.from = froms[0].template prop<non_negative>("segment");
+                }
+                if (!tos.empty()) {
+                    line = tos[0].line();
+                    sub.to = tos[0].template prop<non_negative>("segment");
                 }
 
-                line = froms[0].line();
-                non_negative seg_from = froms[0].prop<non_negative>("segment");
+                return sub;
+            };
 
-                line = tos[0].line();
-                non_negative seg_to = tos[0].prop<non_negative>("segment");
-
-                group.paths.push_back({seg_from, seg_to});
+            for (auto elem: ctx.query(n, q_path)) {
+                group.subtrees.push_back(parse_subtree_elem(elem));
             }
             for (auto elem: ctx.query(n, q_subtree)) {
-                // Schema says we can have a subTree _to_ a segment instead.
-                // It is not documented what this would mean, so we're going
-                // to ignore that option for now.
-                line = elem.line();
-                auto froms = ctx.query(elem, q_from);
-                if (froms.empty()) throw bad_segment_group(group.id, line);
-
-                line = froms[0].line();
-                non_negative seg_from = froms[0].prop<non_negative>("segment");
-                group.subtrees.push_back(seg_from);
+                group.subtrees.push_back(parse_subtree_elem(elem));
             }
         }
         catch (parse_error& e) {
@@ -437,7 +500,41 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
         groups.push_back(std::move(group));
     }
 
-    build_segment_groups(M, groups);
+    M.group_segments = evaluate_segment_groups(std::move(groups), segtree);
+
+    // Build morphology and label dictionaries:
+
+    arb::stitched_morphology stitched = construct_morphology(segments);
+    M.morphology = stitched.morphology();
+    M.segments = stitched.labels();
+
+    std::unordered_multimap<std::string, non_negative> name_to_ids;
+    std::unordered_set<std::string> names;
+
+    for (auto& s: segments) {
+        if (!s.name.empty()) {
+            name_to_ids.insert({s.name, s.id});
+            names.insert(s.name);
+        }
+    }
+
+    for (const auto& name: names) {
+        arb::region r;
+        auto ids = name_to_ids.equal_range(name);
+        for (auto i = ids.first; i!=ids.second; ++i) {
+            r = join(std::move(r), M.segments.regions().at(nl_to_string(i->second)));
+        }
+        M.named_segments.set(name, std::move(r));
+    }
+
+    for (const auto& [group_id, segment_ids]: M.group_segments) {
+        arb::region r;
+        for (auto id: segment_ids) {
+            r = join(std::move(r), M.segments.regions().at(nl_to_string(id)));
+        }
+        M.groups.set(group_id, std::move(r));
+    }
+
     return M;
 }
 

@@ -512,7 +512,7 @@ R"~(
 }
 
 
-TEST(neuroml, group_paths) {
+TEST(neuroml, group_paths_subtrees) {
     using namespace arb;
 
     std::string doc =
@@ -520,18 +520,18 @@ R"~(
 <neuroml xmlns="http://www.neuroml.org/schema/neuroml2">
 <morphology id="m1">
     <segment id="0">
-        <proximal x="1" y="1" z="1" diameter="1"/>
-        <distal x="2" y="2" z="2" diameter="2"/>
+        <proximal x="0" y="0" z="0" diameter="1"/>
+        <distal x="1" y="0" z="0" diameter="2"/>
     </segment>
     <segment id="1">
         <parent segment="0" fractionAlong="0.5"/>
-        <proximal x="1" y="1" z="1" diameter="1"/>
-        <distal x="2" y="2" z="2" diameter="2"/>
+        <proximal x="0.5" y="0" z="0" diameter="1"/>
+        <distal x="0.5" y="1" z="0" diameter="2"/>
     </segment>
     <segment id="2">
         <parent segment="1"/>
-        <proximal x="1" y="1" z="1" diameter="1"/>
-        <distal x="2" y="2" z="2" diameter="2"/>
+        <proximal x="0.5" y="1" z="0" diameter="1"/>
+        <distal x="0.5" y="2" z="0" diameter="2"/>
     </segment>
     <segmentGroup id="path01">
         <path>
@@ -551,25 +551,53 @@ R"~(
             <to segment="0"/>
         </path>
     </segmentGroup>
+    <segmentGroup id="from0">
+        <subTree>
+            <from segment="0"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="from1">
+        <subTree>
+            <from segment="1"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="to1">
+        <subTree>
+            <to segment="1"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="to2">
+        <subTree>
+            <to segment="2"/>
+        </subTree>
+    </segmentGroup>
 </morphology>
 </neuroml>
 )~";
 
     arbnml::neuroml N(doc);
 
-    {
-        arbnml::morphology_data m1 = N.morphology("m1").value();
-        label_dict labels;
-        labels.import(m1.segments);
-        labels.import(m1.groups);
-        mprovider P(m1.morphology, labels);
+    arbnml::morphology_data m1 = N.morphology("m1").value();
+    label_dict labels;
+    labels.import(m1.segments);
+    labels.import(m1.groups);
+    mprovider P(m1.morphology, labels);
 
-        EXPECT_TRUE(region_eq(P, "path01", join(reg::cable(0, 0, 1), region("1"))));
-        EXPECT_FALSE(region_eq(P, "path01", join(region("0"), region("1"))));
-        EXPECT_TRUE(region_eq(P, "path12", join(region("1"), region("2"))));
-        EXPECT_TRUE(region_eq(P, "path10", reg::nil()));
-    }
+    // Note branch 0 in the generated morphology will extend from the
+    // root to the point halfway along segment "0", where there is
+    // a branch point.
+
+    EXPECT_TRUE(region_eq(P, "path01", join(reg::cable(0, 0, 1), region("1"))));
+    EXPECT_FALSE(region_eq(P, "path01", join(region("0"), region("1"))));
+    EXPECT_TRUE(region_eq(P, "path12", join(region("1"), region("2"))));
+    EXPECT_TRUE(region_eq(P, "path10", reg::nil()));
+
+    EXPECT_TRUE(region_eq(P, "from0", reg::nil()));
+    EXPECT_TRUE(region_eq(P, "from1", "2"));
+    EXPECT_TRUE(region_eq(P, "to1", reg::cable(0, 0, 1)));
+    EXPECT_TRUE(region_eq(P, "to2", "path01"));
 }
+
 
 // TODO:
 // * test for neuroml not as top level element/with explicit namespace.

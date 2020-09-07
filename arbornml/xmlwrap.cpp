@@ -1,8 +1,11 @@
 #include <cerrno>
+#include <charconv>
 #include <cstdarg>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <string>
+#include <vector>
 
 extern "C" {
 #include <libxml/xmlerror.h>
@@ -14,32 +17,56 @@ extern "C" {
 
 namespace arbnml {
 
-bool parse_attr(std::string& out, const char* content) {
+namespace detail {
+template <typename V>
+bool from_cstr_(V& out, const char* s) {
+    auto [p, ec] = std::from_chars(s, s+std::strlen(s), out);
+    return ec==std::errc{} && !*p;
+}
+
+template <typename V>
+std::string nl_to_string_(const V& v, unsigned digits_estimate) {
+    std::vector<char> digits(digits_estimate);
+    for (;;) {
+        if (auto [p, ec] = std::to_chars(digits.data(), digits.data()+digits.size(), v); ec == std::errc{}) {
+            return std::string(digits.data(), p);
+        }
+
+        digits_estimate *= 2;
+        digits.resize(digits_estimate);
+    }
+}
+
+} // namespace detail
+
+
+bool from_cstr(std::string& out, const char* content) {
     out = content;
     return true;
 }
 
-bool parse_attr(long long& out, const char* content) {
-    char* end = 0;
-    out = std::strtoll(content, &end, 10);
-    if (end && !*end) return true;
-    return false;
+bool from_cstr(long long& out, const char* content) {
+    return detail::from_cstr_(out, content);
 }
 
-bool parse_attr(unsigned long long& out, const char* content) {
-    if (std::strtol(content, nullptr, 10)>=0) {
-        errno = 0;
-        char* end = 0;
-        out = std::strtoull(content, &end, 10);
-        if (!errno && end && !*end) return true;
-    }
-    return false;
+bool from_cstr(non_negative& out, const char* content) {
+    return detail::from_cstr_(out, content);
 }
 
-bool parse_attr(double& out, const char* content) {
-    char* end = 0;
-    out = std::strtod(content, &end);
-    return end && !*end;
+bool from_cstr(double& out, const char* content) {
+    return detail::from_cstr_(out, content);
+}
+
+std::string nl_to_string(non_negative n) {
+    return detail::nl_to_string_(n, std::numeric_limits<non_negative>::digits10);
+}
+
+std::string nl_to_string(long long n) {
+    return detail::nl_to_string_(n, 1+std::numeric_limits<long long>::digits10);
+}
+
+std::string nl_to_string(double n) {
+    return detail::nl_to_string_(n, 7+std::numeric_limits<double>::max_digits10);
 }
 
 void throw_on_xml_generic_error(void *, const char* msg, ...) {

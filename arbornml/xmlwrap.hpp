@@ -2,9 +2,11 @@
 
 // RAII and iterator wrappers for some libxml2 objects.
 
+#include <any>
 #include <cstddef>
 #include <cstdlib>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -14,22 +16,26 @@ extern "C" {
 #include <libxml/xpathInternals.h>
 }
 
-#include <arbor/util/any.hpp>
-#include <arbor/util/optional.hpp>
-
 #include <arbornml/nmlexcept.hpp>
 
 namespace arbnml {
 
+using non_negative = unsigned long long;
+
+// String wrappers around `to_chars` for attribute types we care about.
+// (`nl` is meant to stand for "no locale".)
+
+std::string nl_to_string(non_negative);
+std::string nl_to_string(long long);
+std::string nl_to_string(double);
+
 // Parse attribute content as the representation of a specific type.
 // Return true if successful.
 
-using non_negative = unsigned long long;
-
-bool parse_attr(std::string& out, const char* content);
-bool parse_attr(non_negative& out, const char* content);
-bool parse_attr(long long& out, const char* content);
-bool parse_attr(double& out, const char* content);
+bool from_cstr(std::string& out, const char* content);
+bool from_cstr(non_negative& out, const char* content);
+bool from_cstr(long long& out, const char* content);
+bool from_cstr(double& out, const char* content);
 
 // Wrap xmlChar* NUL-terminated string that requires deallocation.
 
@@ -55,7 +61,7 @@ void trivial_dealloc(XmlType*) {}
 
 template <typename XmlType, void (*xml_dealloc)(XmlType *) = &trivial_dealloc<XmlType>>
 struct xml_base {
-    xml_base(XmlType* p, arb::util::any depends = {}):
+    xml_base(XmlType* p, std::any depends = {}):
         p_(p, xml_dealloc),
         depends_(std::move(depends))
     {}
@@ -68,18 +74,18 @@ protected:
     auto self() const { return p_; }
 
     // Copy of dependency object.
-    arb::util::any depends() const { return depends_; }
+    std::any depends() const { return depends_; }
 
 private:
     std::shared_ptr<XmlType> p_;
-    arb::util::any depends_;
+    std::any depends_;
 };
 
 // xmlNode RAII wrapper (non-owning).
 
 struct xml_node: protected xml_base<xmlNode>  {
     using base = xml_base<xmlNode>;
-    explicit xml_node(xmlNode* p, arb::util::any depends):
+    explicit xml_node(xmlNode* p, std::any depends):
         base(p, std::move(depends))
     {}
 
@@ -91,14 +97,14 @@ struct xml_node: protected xml_base<xmlNode>  {
     bool has_prop(const char* name) const { return xmlHasProp(get(), (const xmlChar*)name); }
 
     template <typename T>
-    T prop(const char* name, arb::util::optional<T> default_value = arb::util::nullopt) const {
+    T prop(const char* name, std::optional<T> default_value = std::nullopt) const {
         xmlChar* c = xmlGetProp(get(), (const xmlChar*)(name));
         if (!c) {
             return default_value? default_value.value(): throw parse_error("missing required attribute", get()->line);
         }
 
         T v;
-        return parse_attr(v, reinterpret_cast<const char*>(c))? v: throw parse_error("attribute type error", get()->line);
+        return from_cstr(v, reinterpret_cast<const char*>(c))? v: throw parse_error("attribute type error", get()->line);
     }
 
     using base::get; // (unsafe access)
@@ -109,9 +115,9 @@ struct xml_node: protected xml_base<xmlNode>  {
 struct xml_nodeset: protected xml_base<xmlNodeSet>  {
     using base = xml_base<xmlNodeSet>;
 
-    xml_nodeset(): xml_nodeset(nullptr, arb::util::any{}) {}
+    xml_nodeset(): xml_nodeset(nullptr, std::any{}) {}
 
-    xml_nodeset(xmlNodeSet* p, arb::util::any depends):
+    xml_nodeset(xmlNodeSet* p, std::any depends):
         base(p, std::move(depends))
     {}
 
@@ -193,7 +199,7 @@ private:
 struct xml_xpathobj: protected xml_base<xmlXPathObject, xmlXPathFreeObject> {
     using base = xml_base<xmlXPathObject, xmlXPathFreeObject>;
 
-    explicit xml_xpathobj(xmlXPathObject* p, arb::util::any depends):
+    explicit xml_xpathobj(xmlXPathObject* p, std::any depends):
         base(p, std::move(depends))
     {}
 
@@ -207,7 +213,7 @@ struct xml_xpathobj: protected xml_base<xmlXPathObject, xmlXPathFreeObject> {
 struct xml_xpathctx: protected xml_base<xmlXPathContext, xmlXPathFreeContext> {
     using base = xml_base<xmlXPathContext, xmlXPathFreeContext>;
 
-    explicit xml_xpathctx(xmlXPathContext* p, arb::util::any depends):
+    explicit xml_xpathctx(xmlXPathContext* p, std::any depends):
         base(p, std::move(depends))
     {}
 
