@@ -100,6 +100,7 @@ set(unit_sources
     test_event_delivery.cpp
     test_event_generators.cpp
     test_event_queue.cpp
+    test_expected.cpp
     test_filter.cpp
     test_fvm_layout.cpp
     test_fvm_lowered.cpp
