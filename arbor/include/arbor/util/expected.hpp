@@ -288,11 +288,11 @@ struct expected {
     }
 
     T&& value() && {
-        if (*this) return get<0>(data_);
+        if (*this) return get<0>(std::move(data_));
         throw bad_expected_access<E>(error());
     }
     const T&& value() const&& {
-        if (*this) return get<0>(data_);
+        if (*this) return get<0>(std::move(data_));
         throw bad_expected_access<E>(error());
     }
 
@@ -493,11 +493,11 @@ struct expected<void, E> {
         if (!has_value()) throw bad_expected_access<E>(error());
     }
 
-    const E& error() const& { return (*data_).value(); }
-    E& error() & { return (*data_).value(); }
+    const E& error() const& { return data_->value(); }
+    E& error() & { return data_->value(); }
 
-    const E&& error() const&& { return (*std::move(data_)).value(); }
-    E&& error() && { return (*std::move(data_)).value(); }
+    const E&& error() const&& { return std::move(data_->value()); }
+    E&& error() && { return std::move(data_->value()); }
 
 private:
     data_type data_;
