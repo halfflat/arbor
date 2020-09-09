@@ -1,5 +1,7 @@
 #include "../gtest.h"
 
+#include <utility>
+#include <vector>
 #include <arbor/util/expected.hpp>
 
 #include "common.hpp"
@@ -109,6 +111,43 @@ TEST(expected, ctors) {
         expected<Z, Z> myu(std::move(xu));
         EXPECT_FALSE(myu);
         EXPECT_EQ(-2, myu.error().v);
+    }
+}
+
+TEST(expected, assignment) {
+    {
+        expected<int, int> x(10), y(12), z(unexpect, 20);
+
+        EXPECT_EQ(12, (x=y).value());
+        EXPECT_EQ(20, (x=z).error());
+
+        expected<void, int> u, v, w(unexpect, 30);
+
+        EXPECT_TRUE((u=v).has_value());
+        EXPECT_EQ(30, (u=w).error());
+    }
+
+    {
+        struct X {
+            X(): v(0) {}
+            X(const int& a): v(10*a) {}
+            X(int&& a): v(20*a) {}
+            int v;
+        };
+
+        expected<X, int> y;
+        EXPECT_EQ(20, (y=1).value().v);
+        int a = 3;
+        EXPECT_EQ(30, (y=a).value().v);
+
+        expected<int, X> z;
+        EXPECT_EQ(20, (z=make_unexpected(1)).error().v);
+        unexpected<int> b(3);
+        EXPECT_EQ(30, (z=b).error().v);
+
+        expected<void, X> v;
+        EXPECT_EQ(20, (v=make_unexpected(1)).error().v);
+        EXPECT_EQ(30, (v=b).error().v);
     }
 }
 
@@ -254,4 +293,42 @@ TEST(expected, equality) {
         EXPECT_FALSE(x!=make_unexpected(10));
         EXPECT_FALSE(make_unexpected(10)!=x);
     }
+}
+
+TEST(expected, value_or) {
+    expected<double, char> a(2.0), b(unexpect, 'x');
+    EXPECT_EQ(2.0, a.value_or(1));
+    EXPECT_EQ(1.0, b.value_or(1));
+}
+
+namespace {
+struct Xswap {
+    explicit Xswap(int val, int& r): val(val), n_swap_ptr(&r) {}
+    int val;
+    int* n_swap_ptr;
+    void swap(Xswap& other) {
+        ++*n_swap_ptr;
+        std::swap(val, other.val);
+    }
+    friend void swap(Xswap& x1, Xswap& x2) { x1.swap(x2); }
+};
+}
+
+TEST(expected, swap) {
+
+    int swaps = 0;
+    expected<Xswap, int> x1(in_place, -1, swaps), x2(in_place, -2, swaps);
+
+    using std::swap;
+    swap(x1, x2);
+    EXPECT_EQ(-2, x1->val);
+    EXPECT_EQ(-1, x2->val);
+    EXPECT_EQ(1, swaps);
+
+    swaps = 0;
+    expected<Xswap, int> x3(unexpect, 4);
+    swap(x1, x3);
+    EXPECT_EQ(4, x1.error());
+    EXPECT_EQ(-2, x3->val);
+    EXPECT_EQ(0, swaps); // Xswap is moved, not swapped.
 }

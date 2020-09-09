@@ -67,6 +67,9 @@ private:
 
 template <typename E>
 struct unexpected {
+    template <typename F>
+    friend class unexpected;
+
     unexpected() = default;
     unexpected(const unexpected&) = default;
     unexpected(unexpected&&) = default;
@@ -144,7 +147,7 @@ private:
 };
 
 template <typename E>
-unexpected<E> make_unexpected(E e) { return unexpected<E>(std::move(e)); }
+unexpected<E> inline make_unexpected(E e) { return unexpected<E>(std::move(e)); }
 
 template <typename T, typename E>
 struct expected {
@@ -227,7 +230,12 @@ struct expected {
         return *this;
     }
 
-    template <typename S>
+    template <
+        typename S,
+        typename = std::enable_if_t<!std::is_same<expected, detail::remove_cvref_t<S>>::value>,
+        typename = std::enable_if_t<std::is_constructible<T, S>::value>,
+        typename = std::enable_if_t<std::is_assignable<T&, S>::value>
+    >
     expected& operator=(S&& v) {
         data_ = data_type(in_place_index<0>(), std::forward<S>(v));
         return *this;
@@ -424,14 +432,6 @@ struct expected<void, E> {
         typename = std::enable_if_t<!detail::conversion_hazard<unexpected<E>, expected<void, F>>::value>
     >
     expected(expected<void, F>&& other): data_(std::move(other.data_)) {}
-
-    template <
-        typename S,
-        typename = std::enable_if_t<!std::is_same<in_place_t, detail::remove_cvref_t<S>>::value>,
-        typename = std::enable_if_t<!std::is_same<expected, detail::remove_cvref_t<S>>::value>,
-        typename = std::enable_if_t<!std::is_same<unexpected<E>, detail::remove_cvref_t<S>>::value>
-    >
-    expected(S&& x): data_(std::forward<S>(x)) {}
 
     template <typename F>
     expected(const unexpected<F>& u): data_(u) {}
