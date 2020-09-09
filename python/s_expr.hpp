@@ -4,7 +4,7 @@
 #include <memory>
 #include <vector>
 
-#include <arbor/util/either.hpp>
+#include <arbor/util/variant.hpp>
 #include <arbor/util/optional.hpp>
 
 namespace pyarb {
@@ -85,12 +85,12 @@ struct s_expr {
     // An s_expr can be one of
     //      1. an atom
     //      2. a pair of s_expr (head and tail)
-    // The s_expr uses a util::either to represent these two possible states,
+    // The s_expr uses a util::variant to represent these two possible states,
     // which requires using an incomplete definition of s_expr, requiring
     // with a std::shared_ptr.
 
     using pair_type = s_pair<value_wrapper<s_expr>>;
-    arb::util::either<token, pair_type> state = token{-1, tok::nil, "nil"};
+    arb::util::variant<token, pair_type> state = token{-1, tok::nil, "nil"};
 
     s_expr(const s_expr& s): state(s.state) {}
     s_expr() = default;

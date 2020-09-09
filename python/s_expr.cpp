@@ -7,7 +7,7 @@
 #include <ostream>
 #include <vector>
 
-#include <arbor/util/either.hpp>
+#include <arbor/util/variant.hpp>
 #include <arbor/arbexcept.hpp>
 
 #include "s_expr.hpp"
@@ -298,7 +298,7 @@ bool test_identifier(const char* in) {
 //
 
 bool s_expr::is_atom() const {
-    return (bool)state;
+    return state.index()==0;
 }
 
 const token& s_expr::atom() const {

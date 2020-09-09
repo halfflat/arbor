@@ -53,7 +53,7 @@
  * mechanism.
  *
  * The private implementation class catalogue_state does not throw any (catalogue
- * related) exceptions, but instead propagates errors via util::either to the
+ * related) exceptions, but instead propagates errors via util::expected to the
  * mechanism_catalogue methods for handling.
  */
 
