@@ -104,6 +104,10 @@ struct unexpected {
 
     // Assignment operators.
 
+    unexpected& operator=(const unexpected& u) { return value_ = u.value_, *this; }
+
+    unexpected& operator=(unexpected&& u) { return value_ = std::move(u.value_), *this; }
+
     template <typename F>
     unexpected& operator=(const unexpected<F>& u) { return value_ = u.value_, *this; }
 
@@ -245,13 +249,13 @@ struct expected {
 
     template <typename... Args>
     T& emplace(Args&&... args) {
-        data_ = data_type(in_place_index<0>, std::forward<Args>(args)...);
+        data_ = data_type(in_place_index<0>(), std::forward<Args>(args)...);
         return value();
     }
 
     template <typename U, typename... Args>
     T& emplace(std::initializer_list<U> il, Args&&... args) {
-        data_ = data_type(in_place_index<0>, il, std::forward<Args>(args)...);
+        data_ = data_type(in_place_index<0>(), il, std::forward<Args>(args)...);
         return value();
     }
 
@@ -305,65 +309,84 @@ struct expected {
     template <typename S>
     T value_or(S&& s) && { return has_value()? value(): std::forward<S>(s); }
 
-    // Equality.
-
-    template <typename T2, typename E2>
-    friend bool operator==(const expected& a, const expected<T2, E2>& b) {
-        return a? b && a.value()==b.value(): !b && a.error()==b.error();
-    }
-
-    template <typename T2, typename E2>
-    friend bool operator!=(const expected& a, const expected<T2, E2>& b) {
-        return a? !b || a.value()!=b.value(): b || a.error()!=b.error();
-    }
-
-    // Equality with value.
-
-    template <typename T2>
-    friend bool operator==(const expected& a, const T2& v) {
-        return a && a.value()==v;
-    }
-
-    template <typename T2>
-    friend bool operator==(const T2& v, const expected& a) {
-        return a && v==a.value();
-    }
-
-    template <typename T2>
-    friend bool operator!=(const expected& a, const T2& v) {
-        return !a || a.value()!=v;
-    }
-
-    template <typename T2>
-    friend bool operator!=(const T2& v, const expected& a) {
-        return !a || v!=a.value();
-    }
-
-    // Equality with unexpected.
-
-    template <typename E2>
-    friend bool operator==(const expected& a, const unexpected<E2>& u) {
-        return !a && make_unexpected(a.error())==u;
-    }
-
-    template <typename E2>
-    friend bool operator==(const unexpected<E2>& u, const expected& a) {
-        return a==u;
-    }
-
-    template <typename E2>
-    friend bool operator!=(const expected& a, const unexpected<E2>& u) {
-        return a || make_unexpected(a.error())!=u;
-    }
-
-    template <typename E2>
-    friend bool operator!=(const unexpected<E2>& u, const expected& a) {
-        return a!=u;
-    }
-
 private:
     data_type data_;
 };
+
+// Equality comparisons for non-void expected.
+
+template <typename T1, typename E1, typename T2, typename E2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = std::enable_if_t<!std::is_void<T2>::value>>
+inline bool operator==(const expected<T1, E1>& a, const expected<T2, E2>& b) {
+    return a? b && a.value()==b.value(): !b && a.error()==b.error();
+}
+
+template <typename T1, typename E1, typename T2, typename E2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = std::enable_if_t<!std::is_void<T2>::value>>
+inline bool operator!=(const expected<T1, E1>& a, const expected<T2, E2>& b) {
+    return a? !b || a.value()!=b.value(): b || a.error()!=b.error();
+}
+
+template <typename T1, typename E1, typename T2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = decltype(static_cast<bool>(std::declval<const expected<T1, E1>>().value()==std::declval<T2>()))>
+inline bool operator==(const expected<T1, E1>& a, const T2& v) {
+    return a && a.value()==v;
+}
+
+template <typename T1, typename E1, typename T2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = decltype(static_cast<bool>(std::declval<const expected<T1, E1>>().value()==std::declval<T2>()))>
+inline bool operator==(const T2& v, const expected<T1, E1>& a) {
+    return a==v;
+}
+
+template <typename T1, typename E1, typename T2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = decltype(static_cast<bool>(std::declval<const expected<T1, E1>>().value()!=std::declval<T2>()))>
+inline bool operator!=(const expected<T1, E1>& a, const T2& v) {
+    return !a || a.value()!=v;
+}
+
+template <typename T1, typename E1, typename T2,
+          typename = std::enable_if_t<!std::is_void<T1>::value>,
+          typename = decltype(static_cast<bool>(std::declval<const expected<T1, E1>>().value()!=std::declval<T2>()))>
+inline bool operator!=(const T2& v, const expected<T1, E1>& a) {
+    return a!=v;
+}
+
+// Equality comparisons against unexpected.
+
+template <typename T1, typename E1, typename E2,
+          typename = decltype(static_cast<bool>(make_unexpected(std::declval<const expected<T1, E1>>().error())
+                                                ==std::declval<const unexpected<E2>>()))>
+inline bool operator==(const expected<T1, E1>& a, const unexpected<E2>& u) {
+    return !a && make_unexpected(a.error())==u;
+}
+
+template <typename T1, typename E1, typename E2,
+          typename = decltype(static_cast<bool>(make_unexpected(std::declval<const expected<T1, E1>>().error())
+                                                ==std::declval<const unexpected<E2>>()))>
+inline bool operator==(const unexpected<E2>& u, const expected<T1, E1>& a) {
+    return a==u;
+}
+
+template <typename T1, typename E1, typename E2,
+          typename = decltype(static_cast<bool>(make_unexpected(std::declval<const expected<T1, E1>>().error())
+                                                !=std::declval<const unexpected<E2>>()))>
+inline bool operator!=(const expected<T1, E1>& a, const unexpected<E2>& u) {
+    return a || make_unexpected(a.error())!=u;
+}
+
+template <typename T1, typename E1, typename E2,
+          typename = decltype(static_cast<bool>(make_unexpected(std::declval<const expected<T1, E1>>().error())
+                                                !=std::declval<const unexpected<E2>>()))>
+inline bool operator!=(const unexpected<E2>& u, const expected<T1, E1>& a) {
+    return a!=u;
+}
+
 
 template <typename E>
 struct expected<void, E> {
@@ -476,54 +499,24 @@ struct expected<void, E> {
     const E&& error() const&& { return (*std::move(data_)).value(); }
     E&& error() && { return (*std::move(data_)).value(); }
 
-    // Equality.
-
-    template <typename T2, typename E2>
-    friend bool operator==(const expected& a, const expected<T2, E2>& b) {
-        return a? b && std::is_void<T2>::value: !b && a.error()==b.error();
-    }
-
-    template <typename T2, typename E2>
-    friend bool operator==(const expected<T2, E2>& b, const expected& a) {
-        return a==b;
-    }
-
-    template <typename T2, typename E2>
-    friend bool operator!=(const expected& a, const expected<T2, E2>& b) {
-        // Proposal states this should be true if T2 is void and both a and b are true,
-        // but that really doesn't sound correct.
-        return a? !b || !std::is_void<T2>::value: b || a.error()!=b.error();
-    }
-
-    template <typename T2, typename E2>
-    friend bool operator!=(const expected<T2, E2>& b, const expected& a) {
-        return a!=b;
-    }
-
-    template <typename E2>
-    friend bool operator==(const expected& a, const unexpected<E2>& u) {
-        return !a && make_unexpected(a.error())==u;
-    }
-
-    template <typename E2>
-    friend bool operator==(const unexpected<E2>& u, const expected& a) {
-        return a==u;
-    }
-
-    template <typename E2>
-    friend bool operator!=(const expected& a, const unexpected<E2>& u) {
-        return a || make_unexpected(a.error())!=u;
-    }
-
-    template <typename E2>
-    friend bool operator!=(const unexpected<E2>& u, const expected& a) {
-        return a!=u;
-    }
-
 private:
     data_type data_;
 };
 
+// Equality comparisons for void expected.
+
+template <typename T1, typename E1, typename T2, typename E2,
+          typename = std::enable_if_t<std::is_void<T1>::value || std::is_void<T2>::value>>
+inline bool operator==(const expected<T1, E1>& a, const expected<T2, E2>& b) {
+    return a? b && std::is_void<T1>::value && std::is_void<T2>::value: !b && a.error()==b.error();
+}
+
+template <typename T1, typename E1, typename T2, typename E2,
+          typename = std::enable_if_t<std::is_void<T1>::value || std::is_void<T2>::value>>
+inline bool operator!=(const expected<T1, E1>& a, const expected<T2, E2>& b) {
+    return a? !b || !std::is_void<T2>::value || !std::is_void<T1>::value: b || a.error()!=b.error();
+}
+
+
 } // namespace util
 } // namespace arb
-
