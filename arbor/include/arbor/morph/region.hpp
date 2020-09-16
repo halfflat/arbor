@@ -136,6 +136,11 @@ region tagged(int id);
 // Region corresponding to a single segment.
 region segment(int id);
 
+// Region comprising all points x such that there is a point
+// a in `proximal` and a point b in `distal` with a ≤ x ≤ b in the
+// topological partial order.
+region between(locset proximal, locset distal);
+
 // Region up to `distance` distal from points in `start`.
 region distal_interval(locset start, double distance);
 
