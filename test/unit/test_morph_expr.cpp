@@ -236,16 +236,6 @@ TEST(locset, thingify) {
         EXPECT_EQ(thingify(oc_mid_b02, mp),  (ll{{0, 0.5}, {2, 0.5}}));
         EXPECT_EQ(thingify(oc_end_b02, mp),  (ll{{0, 1}, {2, 1}}));
         EXPECT_EQ(thingify(ls::on_components(0.25, reg::cable(1, 0.5, 1)), mp),  (ll{{1, 0.625}}));
-
-        auto min_end_b0b1b3 = ls::minimal(ll{{0,1}, {1,1}, {3,1}});
-        auto max_end_b0b1b3 = ls::maximal(ll{{0,1}, {1,1}, {3,1}});
-        auto min_mid_end_b1 = ls::minimal(ll{{1,0.5}, {1,1}});
-        auto max_mid_end_b1 = ls::maximal(ll{{1,0.5}, {1,1}});
-
-        EXPECT_EQ(thingify(min_end_b0b1b3, mp), (ll{{0,1}, {1,1}}));
-        EXPECT_EQ(thingify(max_end_b0b1b3, mp), (ll{{0,1}, {3,1}}));
-        EXPECT_EQ(thingify(min_mid_end_b1, mp), (ll{{1,0.5}}));
-        EXPECT_EQ(thingify(max_mid_end_b1, mp), (ll{{1,1}}));
     }
     {
         auto mp = mprovider(morphology(sm));
@@ -336,7 +326,6 @@ TEST(region, thingify_simple_morphologies) {
     using svec = std::vector<mpoint>;
     using tvec = std::vector<int>;
     using cl = mcable_list;
-    using ll = mlocation_list;
 
     // A single unbranched cable with 5 sample points.
     // The cable has length 10 μm, with samples located at
@@ -364,10 +353,8 @@ TEST(region, thingify_simple_morphologies) {
         auto q2  = reg::cable(0, 0.25, 0.5);
         auto q3  = reg::cable(0, 0.5,  0.75);
         auto q4  = reg::cable(0, 0.75, 1);
-        auto q23 = reg::cable(0, 0.25, 0.75);
         auto s0  = reg::segment(0);
         auto s2  = reg::segment(2);
-        auto bmid = reg::between(ll{{0, 0.25}}, ll{{0, 0.75}});
 
         // Concrete cable lists
         cl h1_{{0, 0.0, 0.5}};
@@ -397,8 +384,6 @@ TEST(region, thingify_simple_morphologies) {
         EXPECT_TRUE(region_eq(mp, complement(q2), join(q1, q3, q4)));
         EXPECT_TRUE(region_eq(mp, difference(h1, q1), q2));
         EXPECT_TRUE(region_eq(mp, difference(h1, q3), h1));
-
-        EXPECT_TRUE(region_eq(mp, q23, bmid));
 
         // Check round-trip of implicit region conversions.
         // (No fork points in cables, so extent should not including anyhing extra).
@@ -454,7 +439,6 @@ TEST(region, thingify_simple_morphologies) {
         auto reg4_ = distal_interval(end1_, 100);
         auto reg5_ = distal_interval(start1_, 0);
         auto reg6_ = proximal_interval(start1_, 0);
-        auto reg7_ = proximal_interval(start1_, INFINITY);
 
         EXPECT_TRUE(region_eq(mp, segment(3), mcable_list{{2,0,0}}));
         EXPECT_TRUE(region_eq(mp, segment(4), mcable_list{{2,0,1}}));
@@ -470,7 +454,6 @@ TEST(region, thingify_simple_morphologies) {
         EXPECT_TRUE(region_eq(mp, reg4_, mcable_list{{1,1,1}}));
         EXPECT_TRUE(region_eq(mp, reg5_, mcable_list{{1,0,0}}));
         EXPECT_TRUE(region_eq(mp, reg6_, mcable_list{{1,0,0}}));
-        EXPECT_TRUE(region_eq(mp, reg7_, mcable_list{{0,0,1},{1,0,0}}));
     }
 }
 
@@ -534,7 +517,6 @@ TEST(region, thingify_moderate_morphologies) {
         using reg::all;
         using reg::cable;
         using reg::complete;
-        using reg::between;
 
         auto axon = tagged(2);
         auto dend = tagged(3);
@@ -573,9 +555,7 @@ TEST(region, thingify_moderate_morphologies) {
 
         // Test distal and proximal interavls
         auto start0_         = location(0, 0   );
-        auto quar0_          = location(0, 0.25);
-        auto mid0_           = location(0, 0.5 );
-        auto quar1_          = location(1, 0.25);
+        auto quar_1_         = location(1, 0.25);
         auto mid1_           = location(1, 0.5 );
         auto end1_           = location(1, 1   );
         auto mid2_           = location(2, 0.5 );
@@ -583,6 +563,7 @@ TEST(region, thingify_moderate_morphologies) {
         auto mid3_           = location(3, 0.5 );
         auto loc_3_0_        = location(3, 0.4 );
         auto loc_3_1_        = location(3, 0.65);
+        auto mid_3_          = location(3, 0.5 );
         auto reg_a_ = join(cable(0,0.1,0.4), cable(2,0,1), cable(3,0.1,0.4));
         auto reg_b_ = join(cable(0,0.1,0.4), cable(2,0,1), cable(3,0.1,0.3));
         auto reg_c_ = join(cable(0,0,0.7), cable(2,0,0.5), cable(3,0.1,0.4), cable(3,0.9,1));
@@ -590,13 +571,13 @@ TEST(region, thingify_moderate_morphologies) {
 
         // Distal from point and/or interval
         EXPECT_TRUE(region_eq(mp, distal_interval(start0_, 1000), cl{{0,0,1}}));
-        EXPECT_TRUE(region_eq(mp, distal_interval(quar1_,   150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}}));
+        EXPECT_TRUE(region_eq(mp, distal_interval(quar_1_,  150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}}));
         EXPECT_TRUE(region_eq(mp, distal_interval(mid1_,   1000), cl{{1,0.5,1}, {2,0,1}, {3,0,1}}));
         EXPECT_TRUE(region_eq(mp, distal_interval(mid1_,    150), cl{{1,0.5,1}, {2,0,1}, {3,0,0.5}}));
         EXPECT_TRUE(region_eq(mp, distal_interval(end1_,    100), cl{{1,1,1}, {2,0,1}, {3,0,0.5}}));
-        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar1_, mid1_),    150), cl{{1,0.25,1}, {2,0,1}, {3,0,0.5}}));
-        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar1_, loc_3_1_), 150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}, {3,0.65,1}}));
-        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar1_, loc_3_1_), 150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}, {3,0.65,1}}));
+        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar_1_, mid1_),    150), cl{{1,0.25,1}, {2,0,1}, {3,0,0.5}}));
+        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar_1_, loc_3_1_), 150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}, {3,0.65,1}}));
+        EXPECT_TRUE(region_eq(mp, distal_interval(join(quar_1_, loc_3_1_), 150), cl{{1,0.25,1}, {2,0,0.75}, {3,0,0.375}, {3,0.65,1}}));
 
         // Proximal from point and/or interval
         EXPECT_TRUE(region_eq(mp, proximal_interval(mid3_, 100), cl{{3,0,0.5}}));
@@ -605,10 +586,6 @@ TEST(region, thingify_moderate_morphologies) {
         EXPECT_TRUE(region_eq(mp, proximal_interval(end2_, 500), cl{{1,0,1}, {2,0,1}}));
         EXPECT_TRUE(region_eq(mp, proximal_interval(loc_3_0_, 100), cl{{1,0.8,1}, {3,0,0.4}}));
         EXPECT_TRUE(region_eq(mp, proximal_interval(join(loc_3_0_, mid2_), 120), cl{{1,0.3,1}, {2,0,0.5}, {3, 0, 0.4}}));
-
-        // Between locsets
-        EXPECT_TRUE(region_eq(mp, between(sum(quar0_, quar1_), sum(mid0_, mid2_, mid3_)), cl{{0, 0.25, 0.5}, {1, 0.25, 1}, {2, 0, 0.5}, {3, 0, 0.5}}));
-        EXPECT_TRUE(region_eq(mp, between(sum(mid1_, mid2_, mid3_), sum(quar0_, quar1_)), cl{}));
 
         // Test radius_lt and radius_gt
         EXPECT_TRUE(region_eq(mp, radius_lt(all(), 2), cl{{0,0,0.55}, {1,0,0.325}, {3,0.375,0.75}}));

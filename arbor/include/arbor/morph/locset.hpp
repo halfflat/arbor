@@ -133,12 +133,6 @@ locset named(std::string);
 // The null (empty) set.
 locset nil();
 
-// Maximal elements of a locset.
-locset maximal(locset locs);
-
-// Minimal elements of a locset.
-locset minimal(locset locs);
-
 // Most distal points of a region.
 locset most_distal(region reg);
 

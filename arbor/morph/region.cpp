@@ -1,4 +1,3 @@
-#include <cmath>
 #include <string>
 #include <vector>
 #include <stack>
@@ -352,27 +351,6 @@ mextent radius_cmp(const mprovider& p, region r, double val, comp_op op) {
     }
 
     return intersect(reg_extent, mextent(cmp_cables));
-}
-
-// Region comprising all points between a point in the proximal
-// set and a point in the distal set.
-
-struct between_ {
-    locset prox, dist;
-};
-
-region between(locset p, locset d) {
-    return region(between_{p, d});
-}
-
-mextent thingify_(const between_& r, const mprovider& p) {
-    // Various important special cases could be made more efficient, but this will generally do the job:
-    region reg = intersect(distal_interval(ls::minimal(r.prox), INFINITY), proximal_interval(ls::maximal(r.dist), INFINITY));
-    return thingify(reg, p);
-}
-
-std::ostream& operator<<(std::ostream& o, const between_& r) {
-    return o << "(between " << r.prox << " " << r.dist << ")";
 }
 
 // Region with all segments with radius less than r
