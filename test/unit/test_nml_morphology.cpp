@@ -1,7 +1,10 @@
+#include <optional>
+#include <string>
+#include <vector>
+
 #include <arbor/morph/mprovider.hpp>
 #include <arbor/morph/place_pwlin.hpp>
 #include <arbor/morph/primitives.hpp>
-#include <arbor/util/optional.hpp>
 
 #include <arbornml/arbornml.hpp>
 #include <arbornml/nmlexcept.hpp>
@@ -97,7 +100,7 @@ R"~(
     EXPECT_EQ("c3", mdata.cell_id);
     EXPECT_EQ("m1", mdata.id);
 
-    EXPECT_THROW(N.cell_morphology("mr. bobbins").value(), arb::util::optional_unset_error);
+    EXPECT_THROW(N.cell_morphology("mr. bobbins").value(), std::bad_optional_access);
 }
 
 TEST(neuroml, simple_morphologies) {
@@ -533,6 +536,11 @@ R"~(
         <proximal x="0.5" y="1" z="0" diameter="1"/>
         <distal x="0.5" y="2" z="0" diameter="2"/>
     </segment>
+    <segment id="3">
+        <parent segment="1" fractionAlong="0"/>
+        <distal x="0.5" y="0" z="3" diameter="2"/>
+    </segment>
+    <!-- paths and subTrees are essentially equivalent -->
     <segmentGroup id="path01">
         <path>
             <from segment="0"/>
@@ -551,24 +559,52 @@ R"~(
             <to segment="0"/>
         </path>
     </segmentGroup>
-    <segmentGroup id="from0">
+    <segmentGroup id="path0-">
+        <path>
+            <from segment="0"/>
+        </path>
+    </segmentGroup>
+    <segmentGroup id="path1-">
+        <path>
+            <from segment="1"/>
+        </path>
+    </segmentGroup>
+    <segmentGroup id="path-3">
+        <path>
+            <to segment="3"/>
+        </path>
+    </segmentGroup>
+    <segmentGroup id="subTree01">
+        <subTree>
+            <from segment="0"/>
+            <to segment="1"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="subTree12">
+        <subTree>
+            <from segment="1"/>
+            <to segment="2"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="subTree10">
+        <subTree>
+            <from segment="1"/>
+            <to segment="0"/>
+        </subTree>
+    </segmentGroup>
+    <segmentGroup id="subTree0-">
         <subTree>
             <from segment="0"/>
         </subTree>
     </segmentGroup>
-    <segmentGroup id="from1">
+    <segmentGroup id="subTree1-">
         <subTree>
             <from segment="1"/>
         </subTree>
     </segmentGroup>
-    <segmentGroup id="to1">
+    <segmentGroup id="subTree-3">
         <subTree>
-            <to segment="1"/>
-        </subTree>
-    </segmentGroup>
-    <segmentGroup id="to2">
-        <subTree>
-            <to segment="2"/>
+            <to segment="3"/>
         </subTree>
     </segmentGroup>
 </morphology>
@@ -583,19 +619,22 @@ R"~(
     labels.import(m1.groups);
     mprovider P(m1.morphology, labels);
 
-    // Note branch 0 in the generated morphology will extend from the
-    // root to the point halfway along segment "0", where there is
-    // a branch point.
+    // Note: paths/subTrees respect segment parent–child relationships,
+    // not morphological distality.
 
-    EXPECT_TRUE(region_eq(P, "path01", join(reg::cable(0, 0, 1), region("1"))));
-    EXPECT_FALSE(region_eq(P, "path01", join(region("0"), region("1"))));
+    EXPECT_TRUE(region_eq(P, "path01", join(region("0"), region("1"))));
     EXPECT_TRUE(region_eq(P, "path12", join(region("1"), region("2"))));
     EXPECT_TRUE(region_eq(P, "path10", reg::nil()));
+    EXPECT_TRUE(region_eq(P, "path0-", reg::all()));
+    EXPECT_TRUE(region_eq(P, "path1-", join(region("1"), region("2"), region("3"))));
+    EXPECT_TRUE(region_eq(P, "path-3", join(region("0"), region("1"), region("3"))));
 
-    EXPECT_TRUE(region_eq(P, "from0", reg::nil()));
-    EXPECT_TRUE(region_eq(P, "from1", "2"));
-    EXPECT_TRUE(region_eq(P, "to1", reg::cable(0, 0, 1)));
-    EXPECT_TRUE(region_eq(P, "to2", "path01"));
+    EXPECT_TRUE(region_eq(P, "subTree01", join(region("0"), region("1"))));
+    EXPECT_TRUE(region_eq(P, "subTree12", join(region("1"), region("2"))));
+    EXPECT_TRUE(region_eq(P, "subTree10", reg::nil()));
+    EXPECT_TRUE(region_eq(P, "subTree0-", reg::all()));
+    EXPECT_TRUE(region_eq(P, "subTree1-", join(region("1"), region("2"), region("3"))));
+    EXPECT_TRUE(region_eq(P, "subTree-3", join(region("0"), region("1"), region("3"))));
 }
 
 

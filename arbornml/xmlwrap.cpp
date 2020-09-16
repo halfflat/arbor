@@ -4,6 +4,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <locale>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -18,6 +20,9 @@ extern "C" {
 namespace arbnml {
 
 namespace detail {
+
+// Note: widely missing library support for floating point std::from_chars.
+
 template <typename V>
 bool from_cstr_(V& out, const char* s) {
     auto [p, ec] = std::from_chars(s, s+std::strlen(s), out);
@@ -40,21 +45,35 @@ std::string nl_to_string_(const V& v, unsigned digits_estimate) {
 } // namespace detail
 
 
-bool from_cstr(std::string& out, const char* content) {
+bool nl_from_cstr(std::string& out, const char* content) {
     out = content;
     return true;
 }
 
-bool from_cstr(long long& out, const char* content) {
+bool nl_from_cstr(long long& out, const char* content) {
     return detail::from_cstr_(out, content);
 }
 
-bool from_cstr(non_negative& out, const char* content) {
+bool nl_from_cstr(non_negative& out, const char* content) {
     return detail::from_cstr_(out, content);
 }
 
-bool from_cstr(double& out, const char* content) {
-    return detail::from_cstr_(out, content);
+bool nl_from_cstr(double& out, const char* content) {
+    // Note: library support is widely missing for floating point std::from_chars,
+    // so can't just do:
+    //     return detail::from_cstr_(out, content);
+    //
+    // std::strtod() will use the current C locale, so that's out: anticipating the
+    // decimal point character is a race condition.
+
+    std::istringstream is{std::string(content)};
+    is.imbue(std::locale::classic());
+
+    double x;
+    is >> x;
+    if (!is || !is.eof()) return false;
+    out = x;
+    return true;
 }
 
 std::string nl_to_string(non_negative n) {
@@ -63,10 +82,6 @@ std::string nl_to_string(non_negative n) {
 
 std::string nl_to_string(long long n) {
     return detail::nl_to_string_(n, 1+std::numeric_limits<long long>::digits10);
-}
-
-std::string nl_to_string(double n) {
-    return detail::nl_to_string_(n, 7+std::numeric_limits<double>::max_digits10);
 }
 
 void throw_on_xml_generic_error(void *, const char* msg, ...) {

@@ -27,15 +27,14 @@ using non_negative = unsigned long long;
 
 std::string nl_to_string(non_negative);
 std::string nl_to_string(long long);
-std::string nl_to_string(double);
 
 // Parse attribute content as the representation of a specific type.
 // Return true if successful.
 
-bool from_cstr(std::string& out, const char* content);
-bool from_cstr(non_negative& out, const char* content);
-bool from_cstr(long long& out, const char* content);
-bool from_cstr(double& out, const char* content);
+bool nl_from_cstr(std::string& out, const char* content);
+bool nl_from_cstr(non_negative& out, const char* content);
+bool nl_from_cstr(long long& out, const char* content);
+bool nl_from_cstr(double& out, const char* content);
 
 // Wrap xmlChar* NUL-terminated string that requires deallocation.
 
@@ -104,7 +103,7 @@ struct xml_node: protected xml_base<xmlNode>  {
         }
 
         T v;
-        return from_cstr(v, reinterpret_cast<const char*>(c))? v: throw parse_error("attribute type error", get()->line);
+        return nl_from_cstr(v, reinterpret_cast<const char*>(c))? v: throw parse_error("attribute type error", get()->line);
     }
 
     using base::get; // (unsafe access)

@@ -182,12 +182,19 @@ struct neuroml_segment_tree {
 
     // Children of segment with id.
     const std::vector<non_negative>& children(non_negative id) const {
-        return children_.at(id);
+        static std::vector<non_negative> none{};
+        auto iter = children_.find(id);
+        return iter!=children_.end()? iter->second: none;
+    }
+
+    // Does segment id exist?
+    bool contains(non_negative id) const {
+        return index_.count(id);
     }
 
     // Construct from vector of segments. Will happily throw if
     // something doesn't add up.
-    neuroml_segment_tree(std::vector<neuroml_segment> segs):
+    explicit neuroml_segment_tree(std::vector<neuroml_segment> segs):
         segments_(std::move(segs))
     {
         if (segments_.empty()) return;
@@ -268,7 +275,7 @@ std::unordered_map<std::string, std::vector<non_negative>> evaluate_segment_grou
                 else if (!subtree.to) {
                     // Add 'from' and all of its descendents.
                     std::stack<non_negative> pending;
-                    pending.push(*subtree.to);
+                    pending.push(*subtree.from);
 
                     while (!pending.empty()) {
                         auto top = pending.top();
@@ -281,8 +288,15 @@ std::unordered_map<std::string, std::vector<non_negative>> evaluate_segment_grou
                     }
                 }
                 else {
-                    for (auto opt_id = subtree.to; opt_id; opt_id = segtree[*opt_id].parent_id) {
-                        g.segments.push_back(*opt_id);
+                    // Note: if from is not an ancestor of to, the path is regarded as empty.
+                    std::vector<non_negative> path;
+                    auto opt_id = subtree.to;
+                    for (; opt_id && opt_id!=subtree.from; opt_id = segtree[*opt_id].parent_id) {
+                        path.push_back(*opt_id);
+                    }
+                    if (opt_id==subtree.from) {
+                        if (subtree.from) g.segments.push_back(*subtree.from);
+                        g.segments.insert(g.segments.end(), path.begin(), path.end());
                     }
                 }
             }
@@ -301,11 +315,12 @@ std::unordered_map<std::string, std::vector<non_negative>> evaluate_segment_grou
     }
 
     // Build group index -> indices of included groups map.
-    std::vector<std::vector<std::size_t>> index_to_included_indices;
+    std::vector<std::vector<std::size_t>> index_to_included_indices(n_group);
     for (std::size_t i = 0; i<n_group; ++i) {
         const auto& includes = groups[i].includes;
         index_to_included_indices[i].reserve(includes.size());
         for (auto& id: includes) {
+            if (!index.count(id)) throw bad_segment_group(groups[i].id, groups[i].line);
             index_to_included_indices[i].push_back(index.at(id));
         }
     }
@@ -458,6 +473,8 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
             group.id = n.prop<std::string>("id");
             for (auto elem: ctx.query(n, q_member)) {
                 line = elem.line();
+                auto seg_id = elem.prop<non_negative>("segment");
+                if (!segtree.contains(seg_id)) throw bad_segment_group(group.id, line);
                 group.segments.push_back(elem.prop<non_negative>("segment"));
             }
             for (auto elem: ctx.query(n, q_include)) {
@@ -504,7 +521,7 @@ morphology_data parse_morphology_element(xml_xpathctx ctx, xml_node morph) {
 
     // Build morphology and label dictionaries:
 
-    arb::stitched_morphology stitched = construct_morphology(segments);
+    arb::stitched_morphology stitched = construct_morphology(segtree);
     M.morphology = stitched.morphology();
     M.segments = stitched.labels();
 
