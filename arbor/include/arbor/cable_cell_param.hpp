@@ -34,6 +34,7 @@ struct cable_cell_ion_data {
 };
 
 // Current clamp description for stimulus specification.
+#if 0
 struct i_clamp {
     using value_type = double;
 
@@ -46,6 +47,53 @@ struct i_clamp {
     i_clamp(value_type delay, value_type duration, value_type amplitude):
         delay(delay), duration(duration), amplitude(amplitude)
     {}
+};
+#endif
+struct i_clamp {
+    // Current is described by a sine wave with amplitude governed by
+    // a piecewise linear envelope. A frequency of zero indicates
+    // that the current is simply that given by the envelope.
+    //
+    // The envelope is given by a series of envelope_point values:
+    // * The time points must be monotonically increasing.
+    // * Onset and initial amplitude is given by the first point.
+    // * The amplitude for time after the last time point is that
+    //   of the last amplitgude point; an explicit zero amplitude
+    //   point must be provided if the envelope is intended to have
+    //   finite support.
+    //
+    // Periodic envelopes are not supported, but may well be a feature
+    // worth considering in the future.
+
+
+    struct envelope_point {
+        double t;         // [ms]
+        double amplitude; // [nA]
+    };
+
+    double frequency = 0; // [Hz] 0 => constant
+    std::vector<envelope_point> envelope;
+
+    // A default constructed i_clamp, with empty envelope, describes
+    // a trivial stimulus, providing no current at all.
+
+    i_clamp() = default;
+
+    // The simple constructor describes a constant amplitude stimulus
+    // starting from t=0.
+
+    explicit i_clamp(double amplitude, double frequency = 0) {
+        envelope({{0., amplitude}}),
+        frequency(frequency)
+    {}
+
+    // A 'box' stimulus has a fixed onset time, a constant amplitude
+    // while it is 'on', and then returns to zero after the given
+    // duration.
+
+    static i_clamp box(double onset, double duration, double amplitude, double frequency = 0) {
+        return i_clamp({{delay, amplitude}, {delay+duration, amplitude}, {delay+duration, 0.}}, frequency);
+    }
 };
 
 // Threshold detector description.

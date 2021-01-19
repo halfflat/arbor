@@ -265,7 +265,21 @@ struct fvm_ion_config {
 
     // Ion-specific (initial) reversal potential per CV.
     std::vector<value_type> init_revpot;
+};
 
+struct fvm_stimulus_config {
+    using value_type = fvm_value_type;
+    using index_type = fvm_index_type;
+
+    // Ordered CV indices where stimuli are present; may contain duplicates.
+    std::vector<index_type> cv;
+
+    // Frequency, amplitude info, per instance.
+    // Note that amplitudes have been scaled by 1/CV area so that they are represent as current densities, not currents.
+
+    std::vector<double> frequency; // [Hz]
+    std::vector<std::vector<double>> envelope_time;      // [ms]
+    std::vector<std::vector<double>> envelope_amplitude; // [A/m²]
 };
 
 struct fvm_mechanism_data {
@@ -274,6 +288,9 @@ struct fvm_mechanism_data {
 
     // Ion config, indexed by ion name.
     std::unordered_map<std::string, fvm_ion_config> ions;
+
+    // Stimulus config.
+    fvm_stimulus_config stimuli;
 
     // Total number of targets (point-mechanism points).
     std::size_t n_target = 0;

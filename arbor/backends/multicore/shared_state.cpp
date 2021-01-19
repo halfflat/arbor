@@ -16,6 +16,7 @@
 
 #include "backends/event.hpp"
 #include "io/sepval.hpp"
+#include "util/index_into.hpp"
 #include "util/padded_alloc.hpp"
 #include "util/rangeutil.hpp"
 
@@ -80,11 +81,96 @@ void ion_state::zero_current() {
     util::fill(iX_, 0);
 }
 
+// istim_state methods:
+
+istim_state::istim_state(const fvm_stimulus_config& stim_data, unsigned align):
+    alignment(min_alignment(align)),
+    frequency_(stim_data.frequency.begin(), stim_data.frequency.end(), pad(alignment)),
+    stim_i(stim_data.cv.size(), 0., pad(alignment))
+    envl_idx_(stim_data.cv.size(), 0u, pad(alignment))
+{
+    using util::assign;
+
+    // Translate instance-to-CV index from stim_data to istim_state index vectors.
+    {
+        std::vector<index_type> stage_cv;
+        std::unique_copy(stim_data.cv.begin(), stim_data.cv.end(), std::back_inserter(stage_ai));
+        assign(accu_to_cv_, stage_cv);
+    }
+    assign(accu_index_, util::index_into(stim_data.cv, accu_to_cv_));
+
+    std::size_t n = accu_index_.size();
+    std::vector<fvm_value_type> envl_a, envl_t;
+    std::vector<fvm_index_type> edivs;
+
+    arb_assert(n==frequency_.size());
+    arb_assert(n==stim.envelope_time.size());
+    arb_assert(n==stim.envelope_amplitude.size());
+
+    edivs.reserve(n+1);
+    edivs.push_back(0);
+
+    for (auto i: util::make_span(n)) {
+        arb_assert(stim.envelope_time[i].size()==stim.envelope_amplitude.size());
+        arb_assert(util::is_sorted(stim.envelope_time));
+
+        util::append(envl_a, stim.envelope_amplitude[i]);
+        util::append(envl_t, stim.envelope_time[i]);
+        edivs.push_back(fvm_index_type(envl_t.size()));
+    }
+
+    assign(envl_amplitudes_, envl_a);
+    assign(envl_times_, envl_t);
+    assign(envl_divs_, edivs);
+    envl_index_.assin(edivs.data(), edivs.data()+n);
+}
+
+void ion_state::zero_current() {
+    util::fill(stim_i, 0);
+}
+
 void ion_state::reset() {
     zero_current();
-    std::copy(reset_Xi_.begin(), reset_Xi_.end(), Xi_.begin());
-    std::copy(reset_Xo_.begin(), reset_Xo_.end(), Xo_.begin());
-    std::copy(init_eX_.begin(), init_eX_.end(), eX_.begin());
+
+    std::size_t n = envl_index_.size();
+    std::copy(envl_divs_.data(), envl_divs_.data()+n, envl_index_.begin());
+}
+
+void ion_state::add_current(const array& time, array& current_density) {
+    constexpr double freq_scale = math::pi<double>*0.001;
+
+    // Consider vectorizing...
+    for (auto i: util::count_along(accu_index_)) {
+        // Advance index into envelope until either
+        // - the next envelope time is greater than simulation time, or
+        // - it is the last valid index for the envelope.
+
+        fvm_index_type ei_left = envl_divs[i];
+        fvm_index_type ei_right = envl_divs[i+1];
+
+        if (ei_left==ei_right || time<envl_time[ei_left]) continue;
+
+        auto& ei = envl_index[i];
+        double t = time[i];
+        while (ei+1<ei_right && envl_time[ei+1]<=t) ++ei;
+
+        double J = envl_amplitudes_[ei]; // current density (A/m²)
+        if (ei+1<ei_right) {
+            // linearly interpolate:
+            arb_assert(envl_time[ei]<=t && envl_time[ei+1]>t);
+            double J1 = envl_amplitudes_[ei+1];
+            double u = (t-envl_time[ei])/(envl_time[ei+1]-envl_time[ei]);
+            J = math::lerp(J, J1, u);
+        }
+
+        if (frequency_[i]) {
+            J *= std::sin(freq_scale*t);
+        }
+
+        fvm_index_type ai = accu_index_[i];
+        accu_stim_[ai] += J;
+        current_density[accu_to_cv_[ai]] += J;
+    }
 }
 
 // shared_state methods:
@@ -155,6 +241,10 @@ void shared_state::add_ion(
         std::forward_as_tuple(charge, ion_info, alignment));
 }
 
+void shared_state::configure_stimulus(const fvm_stim_config& stims) {
+    stim_data = istim_state(stims, alignment);
+}
+
 void shared_state::reset() {
     std::copy(init_voltage.begin(), init_voltage.end(), voltage.begin());
     util::fill(current_density, 0);
@@ -166,6 +256,8 @@ void shared_state::reset() {
     for (auto& i: ion_data) {
         i.second.reset();
     }
+
+    stim_data.reset();
 }
 
 void shared_state::zero_currents() {
@@ -226,6 +318,11 @@ void shared_state::add_gj_current() {
 
         current_density[gj.loc.first] -= curr;
     }
+}
+
+void shared_state::add_stimulus_current() {
+    // Not vectorized, but consider doing so ...
+
 }
 
 std::pair<fvm_value_type, fvm_value_type> shared_state::time_bounds() const {
