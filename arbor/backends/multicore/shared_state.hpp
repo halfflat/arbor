@@ -95,6 +95,9 @@ struct istim_state {
     // Zero stim current, reset indices.
     void reset();
 
+    // Contribute to current density:
+    void add_current(const array& time, array& current_density);
+
     // Construct state from i_clamp data:
     istim_state(const fvm_stimulus_config& stim_data, unsigned align);
 
@@ -153,7 +156,7 @@ struct shared_state {
         int charge,
         const fvm_ion_config& ion_data);
 
-    void configure_stimulus(const fvm_stim_config&);
+    void configure_stimulus(const fvm_stimulus_config&);
 
     void zero_currents();
 

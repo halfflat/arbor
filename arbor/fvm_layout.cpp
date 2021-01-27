@@ -751,9 +751,9 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
     }
 
     append(left.stimuli.cv, right.stimuli.cv);
-    append(left.stimuli.frequency.cv, right.stimuli.frequency.cv);
-    append(left.stimuli.envelope_time.cv, right.stimuli.envelope_time.cv);
-    append(left.stimuli.envelope_amplitude.cv, right.stimuli.envelope_amplitude.cv);
+    append(left.stimuli.frequency, right.stimuli.frequency);
+    append(left.stimuli.envelope_time, right.stimuli.envelope_time);
+    append(left.stimuli.envelope_amplitude, right.stimuli.envelope_amplitude);
 
     left.n_target += right.n_target;
     left.post_events |= right.post_events;
@@ -1098,15 +1098,16 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         config.envelope_amplitude.reserve(n);
 
         for (auto i: cv_order) {
+            const i_clamp& stim = stimuli[i].item;
             config.cv.push_back(stimuli_cv[i]);
-            config.frequency.push_back(stimuli[i].frequency);
+            config.frequency.push_back(stim.frequency);
 
-            std::size_t envl_n = stimuli[i].envelope.size();
+            std::size_t envl_n = stim.envelope.size();
             std::vector<double> envl_t, envl_a;
             envl_t.reserve(envl_n);
             envl_a.reserve(envl_n);
 
-            for (auto [t, a]: stimuli[i].envelope) {
+            for (auto [t, a]: stim.envelope) {
                 envl_t.push_back(t);
                 envl_a.push_back(a);
             }

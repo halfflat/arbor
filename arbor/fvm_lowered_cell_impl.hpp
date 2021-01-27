@@ -509,7 +509,7 @@ void fvm_lowered_cell_impl<Backend>::initialize(
     }
 
     if (!mech_data.stimuli.cv.empty()) {
-        state_->configure_stimuli(mech_data.stimuli);
+        state_->configure_stimulus(mech_data.stimuli);
     }
 
     target_handles.resize(mech_data.n_target);
