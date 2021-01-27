@@ -750,6 +750,11 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
         }
     }
 
+    append(left.stimuli.cv, right.stimuli.cv);
+    append(left.stimuli.frequency.cv, right.stimuli.frequency.cv);
+    append(left.stimuli.envelope_time.cv, right.stimuli.envelope_time.cv);
+    append(left.stimuli.envelope_amplitude.cv, right.stimuli.envelope_amplitude.cv);
+
     left.n_target += right.n_target;
     left.post_events |= right.post_events;
 
@@ -1076,6 +1081,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
     if (!cell.stimuli().empty()) {
         const auto& stimuli = cell.stimuli();
+        fvm_stimulus_config config;
 
         std::vector<size_type> stimuli_cv;
         assign_by(stimuli_cv, stimuli, [&D, cell_idx](auto& p) {
@@ -1085,19 +1091,30 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
         assign(cv_order, count_along(stimuli));
         sort_by(cv_order, [&](size_type i) { return stimuli_cv[i]; });
 
-        fvm_mechanism_config config;
-        config.kind = mechanismKind::point;
-        // (param_values entries must be ordered by parameter name)
-        config.param_values = {{"amplitude", {}}, {"delay", {}}, {"duration", {}}};
+        std::size_t n = stimuli.size();
+        config.cv.reserve(n);
+        config.frequency.reserve(n);
+        config.envelope_time.reserve(n);
+        config.envelope_amplitude.reserve(n);
 
         for (auto i: cv_order) {
             config.cv.push_back(stimuli_cv[i]);
-            config.param_values[0].second.push_back(stimuli[i].item.amplitude);
-            config.param_values[1].second.push_back(stimuli[i].item.delay);
-            config.param_values[2].second.push_back(stimuli[i].item.duration);
+            config.frequency.push_back(stimuli[i].frequency);
+
+            std::size_t envl_n = stimuli[i].envelope.size();
+            std::vector<double> envl_t, envl_a;
+            envl_t.reserve(envl_n);
+            envl_a.reserve(envl_n);
+
+            for (auto [t, a]: stimuli[i].envelope) {
+                envl_t.push_back(t);
+                envl_a.push_back(a);
+            }
+            config.envelope_time.push_back(std::move(envl_t));
+            config.envelope_amplitude.push_back(std::move(envl_a));
         }
 
-        M.mechanisms["_builtin_stimulus"] = std::move(config);
+        M.stimuli = std::move(config);
     }
 
     // Ions:

@@ -76,22 +76,22 @@ struct i_clamp {
 
     // A default constructed i_clamp, with empty envelope, describes
     // a trivial stimulus, providing no current at all.
-
     i_clamp() = default;
 
-    // The simple constructor describes a constant amplitude stimulus
-    // starting from t=0.
-
+    // The simple constructor describes a constant amplitude stimulus starting from t=0.
     explicit i_clamp(double amplitude, double frequency = 0) {
         envelope({{0., amplitude}}),
         frequency(frequency)
     {}
 
-    // A 'box' stimulus has a fixed onset time, a constant amplitude
-    // while it is 'on', and then returns to zero after the given
-    // duration.
+    // Describe a stimulus by envelope and frequency.
+    explicit i_clamp(std::vector<envelope_point> envelope, double frequency = 0) {
+        envelope(std::move(envelope)),
+        frequency(frequency)
+    {}
 
-    static i_clamp box(double onset, double duration, double amplitude, double frequency = 0) {
+    // A 'box' stimulus with fixed onset time, duration, and constant amplitude.
+    i_clamp i_clamp(double onset, double duration, double amplitude, double frequency = 0) {
         return i_clamp({{delay, amplitude}, {delay+duration, amplitude}, {delay+duration, 0.}}, frequency);
     }
 };
