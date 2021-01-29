@@ -1099,7 +1099,10 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
         for (auto i: cv_order) {
             const i_clamp& stim = stimuli[i].item;
-            config.cv.push_back(stimuli_cv[i]);
+            auto cv = stimuli_cv[i];
+            double cv_area_scale = 1000./D.cv_area[cv]; // constant scales from nA/µm² to A/m².
+
+            config.cv.push_back(cv);
             config.frequency.push_back(stim.frequency);
 
             std::size_t envl_n = stim.envelope.size();
@@ -1109,7 +1112,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
             for (auto [t, a]: stim.envelope) {
                 envl_t.push_back(t);
-                envl_a.push_back(a);
+                envl_a.push_back(a*cv_area_scale);
             }
             config.envelope_time.push_back(std::move(envl_t));
             config.envelope_amplitude.push_back(std::move(envl_a));

@@ -102,6 +102,7 @@ istim_state::istim_state(const fvm_stimulus_config& stim, unsigned align):
         assign(accu_to_cv_, stage_cv);
     }
     assign(accu_index_, util::index_into(stim.cv, accu_to_cv_));
+    accu_stim_.resize(accu_to_cv_.size());
 
     std::size_t n = accu_index_.size();
     std::vector<fvm_value_type> envl_a, envl_t;
@@ -115,8 +116,8 @@ istim_state::istim_state(const fvm_stimulus_config& stim, unsigned align):
     edivs.push_back(0);
 
     for (auto i: util::make_span(n)) {
-        arb_assert(stim.envelope_time[i].size()==stim.envelope_amplitude.size());
-        arb_assert(util::is_sorted(stim.envelope_time));
+        arb_assert(stim.envelope_time[i].size()==stim.envelope_amplitude[i].size());
+        arb_assert(util::is_sorted(stim.envelope_time[i]));
 
         util::append(envl_a, stim.envelope_amplitude[i]);
         util::append(envl_t, stim.envelope_time[i]);
@@ -140,7 +141,7 @@ void istim_state::reset() {
     std::copy(envl_divs_.data(), envl_divs_.data()+n, envl_index_.begin());
 }
 
-void istim_state::add_current(const array& time, array& current_density) {
+void istim_state::add_current(const array& time, const iarray& cv_to_intdom, array& current_density) {
     constexpr double freq_scale = math::pi<double>*0.001;
 
     // Consider vectorizing...
@@ -151,7 +152,10 @@ void istim_state::add_current(const array& time, array& current_density) {
 
         fvm_index_type ei_left = envl_divs_[i];
         fvm_index_type ei_right = envl_divs_[i+1];
-        double t = time[i];
+
+        fvm_index_type ai = accu_index_[i];
+        fvm_index_type cv = accu_to_cv_[ai];
+        double t = time[cv_to_intdom[cv]];
 
         if (ei_left==ei_right || t<envl_times_[ei_left]) continue;
 
@@ -171,9 +175,8 @@ void istim_state::add_current(const array& time, array& current_density) {
             J *= std::sin(freq_scale*t);
         }
 
-        fvm_index_type ai = accu_index_[i];
         accu_stim_[ai] += J;
-        current_density[accu_to_cv_[ai]] += J;
+        current_density[cv] -= J;
     }
 }
 
@@ -326,7 +329,7 @@ void shared_state::add_gj_current() {
 }
 
 void shared_state::add_stimulus_current() {
-     stim_data.add_current(time, current_density);
+     stim_data.add_current(time, cv_to_intdom, current_density);
 }
 
 std::pair<fvm_value_type, fvm_value_type> shared_state::time_bounds() const {

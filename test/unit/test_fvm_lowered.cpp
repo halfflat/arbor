@@ -373,10 +373,6 @@ TEST(fvm_lowered, stimulus) {
     fvm_cell fvcell(context);
     fvcell.initialize({0}, cable1d_recipe(cells), cell_to_intdom, targets, probe_map);
 
-    mechanism* stim = find_mechanism(fvcell, "_builtin_stimulus");
-    ASSERT_TRUE(stim);
-    EXPECT_EQ(2u, stim->size());
-
     auto& state = *(fvcell.*private_state_ptr).get();
     auto& J = state.current_density;
     auto& T = state.time;
@@ -384,30 +380,33 @@ TEST(fvm_lowered, stimulus) {
     // Test that no current is injected at t=0.
     memory::fill(J, 0.);
     memory::fill(T, 0.);
-    stim->update_current();
+    state.add_stimulus_current();
 
     for (auto j: J) {
         EXPECT_EQ(j, 0.);
     }
 
+    constexpr double reltol = 1e-10;
+    using testing::near_relative;
+
     // Test that 0.1 nA current is injected at soma at t=1.
     memory::fill(J, 0.);
     memory::fill(T, 1.);
-    stim->update_current();
+    state.add_stimulus_current();
     constexpr double unit_factor = 1e-3; // scale A/m²·µm² to nA
-    EXPECT_DOUBLE_EQ(-0.1, J[soma_cv]*A[soma_cv]*unit_factor);
+    EXPECT_TRUE(near_relative(-0.1, J[soma_cv]*A[soma_cv]*unit_factor, reltol));
 
     // Test that 0.1 nA is again injected at t=1.5, for a total of 0.2 nA.
     memory::fill(T, 1.);
-    stim->update_current();
-    EXPECT_DOUBLE_EQ(-0.2, J[soma_cv]*A[soma_cv]*unit_factor);
+    state.add_stimulus_current();
+    EXPECT_TRUE(near_relative(-0.2, J[soma_cv]*A[soma_cv]*unit_factor, reltol));
 
     // Test that at t=10, no more current is injected at soma, and that
     // that 0.3 nA is injected at dendrite tip.
     memory::fill(T, 10.);
-    stim->update_current();
-    EXPECT_DOUBLE_EQ(-0.2, J[soma_cv]*A[soma_cv]*unit_factor);
-    EXPECT_DOUBLE_EQ(-0.3, J[tip_cv]*A[tip_cv]*unit_factor);
+    state.add_stimulus_current();
+    EXPECT_TRUE(near_relative(-0.2, J[soma_cv]*A[soma_cv]*unit_factor, reltol));
+    EXPECT_TRUE(near_relative(-0.3, J[tip_cv]*A[tip_cv]*unit_factor, reltol));
 }
 
 // Test derived mechanism behaviour.

@@ -77,7 +77,7 @@ struct istim_state {
     unsigned alignment = 1; // Alignment and padding multiple.
 
     // Immutable data (post initialization):
-    iarray accu_index_;     // Instance to accumulator index (stim_i index) map.
+    iarray accu_index_;     // Instance to accumulator index (accu_stim_ index) map.
     iarray accu_to_cv_;     // Accumulator index to CV map.
 
     array frequency_;       // (Hz) stimulus frequency per instance.
@@ -96,7 +96,7 @@ struct istim_state {
     void reset();
 
     // Contribute to current density:
-    void add_current(const array& time, array& current_density);
+    void add_current(const array& time, const iarray& cv_to_intdom, array& current_density);
 
     // Construct state from i_clamp data:
     istim_state(const fvm_stimulus_config& stim_data, unsigned align);
