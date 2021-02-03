@@ -86,7 +86,7 @@ struct fvm_probe_weighted_multi {
 
 // Trans-membrane currents require special handling!
 struct fvm_probe_membrane_currents {
-    std::vector<probe_handle> raw_handles; // Voltage per CV.
+    std::vector<probe_handle> raw_handles; // Voltage per CV, followed by stim current per CV.
     std::vector<mcable> metadata;          // Cables from each CV, in CV order.
 
     std::vector<unsigned> cv_parent;       // Parent CV index for each CV.

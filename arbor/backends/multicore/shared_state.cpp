@@ -91,16 +91,12 @@ void ion_state::reset() {
 
 istim_state::istim_state(const fvm_stimulus_config& stim, unsigned align):
     alignment(min_alignment(align)),
+    accu_to_cv_(stim.cv_unique.begin(), stim.cv_unique.end(), pad(alignment)),
     frequency_(stim.frequency.begin(), stim.frequency.end(), pad(alignment))
 {
     using util::assign;
 
     // Translate instance-to-CV index from stim to istim_state index vectors.
-    {
-        std::vector<fvm_index_type> stage_cv;
-        std::unique_copy(stim.cv.begin(), stim.cv.end(), std::back_inserter(stage_cv));
-        assign(accu_to_cv_, stage_cv);
-    }
     assign(accu_index_, util::index_into(stim.cv, accu_to_cv_));
     accu_stim_.resize(accu_to_cv_.size());
 

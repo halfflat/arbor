@@ -271,12 +271,14 @@ struct fvm_stimulus_config {
     using value_type = fvm_value_type;
     using index_type = fvm_index_type;
 
-    // Ordered CV indices where stimuli are present; may contain duplicates.
+    // CV index for each stimulus instance; monotonically increasing.
     std::vector<index_type> cv;
+
+    // CV indices where one or more stimuli are present; strictly monotonically increasing.
+    std::vector<index_type> cv_unique;
 
     // Frequency, amplitude info, per instance.
     // Note that amplitudes have been scaled by 1/CV area so that they are represent as current densities, not currents.
-
     std::vector<double> frequency; // [Hz]
     std::vector<std::vector<double>> envelope_time;      // [ms]
     std::vector<std::vector<double>> envelope_amplitude; // [A/m²]

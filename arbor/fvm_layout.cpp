@@ -1093,6 +1093,7 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
 
         std::size_t n = stimuli.size();
         config.cv.reserve(n);
+        config.cv_unique.reserve(n);
         config.frequency.reserve(n);
         config.envelope_time.reserve(n);
         config.envelope_amplitude.reserve(n);
@@ -1117,6 +1118,9 @@ fvm_mechanism_data fvm_build_mechanism_data(const cable_cell_global_properties& 
             config.envelope_time.push_back(std::move(envl_t));
             config.envelope_amplitude.push_back(std::move(envl_a));
         }
+
+        std::unique_copy(config.cv.begin(), config.cv.end(), std::back_inserter(config.cv_unique));
+        config.cv_unique.shrink_to_fit();
 
         M.stimuli = std::move(config);
     }
