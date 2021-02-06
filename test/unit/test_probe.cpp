@@ -1056,7 +1056,6 @@ void run_total_current_probe_test(const context& ctx) {
     auto run_cells = [&](bool interior_forks) {
         auto flags = interior_forks? cv_policy_flag::interior_forks: cv_policy_flag::none;
         cv_policy policy = cv_policy_fixed_per_branch(n_cv_per_branch, flags);
-        //for (auto& c: cells) { c.discretization() = policy; }
         d0.set_default(policy);
         d1.set_default(policy);
         std::vector<cable_cell> cells = {{m, {}, d0}, {m, {}, d1}};
@@ -1138,132 +1137,50 @@ void run_total_current_probe_test(const context& ctx) {
 }
 
 
-// TODO: Adapt to sitm probe and total-stim test.
-#if 0
 template <typename Backend>
-void run_total_current_probe_test(const context& ctx) {
-    // Model two passive Y-shaped cells with a similar but not identical
-    // time constant τ.
-    //
-    // Sample each cell's total membrane currents at the same time,
-    // approximately equal to the time constants τ.
-    //
-    // Net current flux in each cell should be zero, but currents should
-    // differ between the cells.
+void run_stimulus_probe_test(const context& ctx) {
+    // Model two simple stick cable cells, 3 CVs each, and stimuli on cell 0, cv 1
+    // and cell 1, cv 2. Run both cells in the same cell group.
 
-    auto m = make_y_morphology();
-    decor d0;
+    const double stim_until = 1.; // [ms]
+    auto m = make_stick_morphology();
+    cv_policy policy = cv_policy_fixed_per_branch(3);
 
-    const unsigned n_cv_per_branch = 3;
-    const unsigned n_branch = 3;
+    decor d0, d1;
+    d0.set_default(policy);
+    d0.place(mlocation{0, 0.5}, i_clamp(0., stim_until, 10.));
+    d0.place(mlocation{0, 0.5}, i_clamp(0., stim_until, 20.));
+    double expected_stim0 = 30;
 
-    // The time constant will be membrane capacitance / membrane conductance.
-    // For τ = 0.1 ms, set conductance to 0.01 S/cm² and membrance capacitance
-    // to 0.01 F/m².
+    d1.set_default(policy);
+    d1.place(mlocation{0, 1}, i_clamp(0., stim_until, 30.));
+    d1.place(mlocation{0, 1}, i_clamp(0., stim_until, -10.));
+    double expected_stim1 = 20;
 
-    const double tau = 0.1;     // [ms]
-    d0.place(mlocation{0, 0}, i_clamp(0, INFINITY, 0.3));
+    std::vector<cable_cell> cells = {{m, {}, d0}, {m, {}, d1}};
 
-    d0.paint(reg::all(), mechanism_desc("ca_linear").set("g", 0.01)); // [S/cm²]
-    d0.set_default(membrane_capacitance{0.01}); // [F/m²]
-    // Tweak membrane capacitance on cells[1] so as to change dynamics a bit.
-    auto d1 = d0;
-    d1.set_default(membrane_capacitance{0.009}); // [F/m²]
-
-    // We'll run each set of tests twice: once with a trivial (zero-volume) CV
-    // at the fork points, and once with a non-trivial CV centred on the fork
-    // point.
+    // Sample the cells during the stimulus, and after.
 
     trace_data<std::vector<double>, mcable_list> traces[2];
-    trace_data<std::vector<double>, mcable_list> ion_traces[2];
 
-    // Run the cells sampling at τ and 20τ for both total membrane
-    // current and total membrane ionic current.
+    for (unsigned i: {0u, 1u}) {
+        traces[i] = run_simple_sampler<std::vector<double>, mcable_list>(ctx, 2.5*stim_until, cells, i,
+                cable_probe_stimulus_current_cell{}, {stim_until/2, 2*stim_until}).at(0);
 
-    auto run_cells = [&](bool interior_forks) {
-        auto flags = interior_forks? cv_policy_flag::interior_forks: cv_policy_flag::none;
-        cv_policy policy = cv_policy_fixed_per_branch(n_cv_per_branch, flags);
-        //for (auto& c: cells) { c.discretization() = policy; }
-        d0.set_default(policy);
-        d1.set_default(policy);
-        std::vector<cable_cell> cells = {{m, {}, d0}, {m, {}, d1}};
-
-
-        for (unsigned i = 0; i<2; ++i) {
-            SCOPED_TRACE(i);
-
-            const double t_end = 21*tau; // [ms]
-
-            traces[i] = run_simple_sampler<std::vector<double>, mcable_list>(ctx, t_end, cells, i,
-                    cable_probe_total_current_cell{}, {tau, 20*tau}).at(0);
-
-            ion_traces[i] = run_simple_sampler<std::vector<double>, mcable_list>(ctx, t_end, cells, i,
-                    cable_probe_total_ion_current_cell{}, {tau, 20*tau}).at(0);
-
+        ASSERT_EQ(3u, traces[i].meta.size());
+        for (unsigned cv: {0u, 1u, 2u}) {
             ASSERT_EQ(2u, traces[i].size());
-            ASSERT_EQ(2u, ion_traces[i].size());
-
-            // Check metadata size:
-            //  * With trivial forks, should have n_cv_per_branch*n_branch cables; zero-length cables
-            //    associated with the trivial CVs at forks should not be included.
-            //  * With nontrivial forks, we'll have an extra cable at the head of each branch, which
-            //    for all but the root branch will be a component cable of the CV on the fork.
-            //
-            // Total membrane current and total ionic mebrane current should have the
-            // same support and same metadata.
-
-            ASSERT_EQ((n_cv_per_branch+(int)interior_forks)*n_branch, traces[i].meta.size());
-            EXPECT_EQ(ion_traces[i].meta, traces[i].meta);
-            EXPECT_EQ(ion_traces[i][0].v.size(), traces[i][0].v.size());
-            EXPECT_EQ(ion_traces[i][1].v.size(), traces[i][1].v.size());
-
-            // Check total membrane currents are individually non-zero, but sum is, both
-            // at t=τ (j=0) and t=20τ (j=1).
-
-            for (unsigned j: {0u, 1u}) {
-                double max_abs_i_memb = 0;
-                double sum_i_memb = 0;
-                for (auto i_memb: traces[i][j].v) {
-                    EXPECT_NE(0.0, i_memb);
-                    max_abs_i_memb = std::max(max_abs_i_memb, std::abs(i_memb));
-                    sum_i_memb += i_memb;
-                }
-
-                EXPECT_NEAR(0.0, sum_i_memb, 1e-6*max_abs_i_memb);
-            }
-
-            // Confirm that total and ion currents differ at τ but are close at 20τ.
-
-            for (unsigned k = 0; k<traces[i].size(); ++k) {
-                const double rtol_large = 1e-3;
-                EXPECT_FALSE(testing::near_relative(traces[i][0].v.at(k), ion_traces[i][0].v.at(k), rtol_large));
-            }
-
-            for (unsigned k = 0; k<traces[i].size(); ++k) {
-                const double rtol_small = 1e-6;
-                EXPECT_TRUE(testing::near_relative(traces[i][1].v.at(k), ion_traces[i][1].v.at(k), rtol_small));
-            }
-
         }
-
-        // Total membrane currents should differ between the two cells at t=τ.
-
-        for (unsigned k = 0; k<traces[0][0].v.size(); ++k) {
-            EXPECT_NE(traces[0][0].v.at(k), traces[1][0].v.at(k));
-        }
-    };
-
-    {
-        SCOPED_TRACE("trivial fork CV");
-        run_cells(false);
     }
 
-    {
-        SCOPED_TRACE("non-trival fork CV");
-        run_cells(true);
-    }
+    // Every sample in each trace should be zero _except_ the first sample for cell 0, cv 1
+    // and the first sample for cell 1, cv 2.
+
+    EXPECT_EQ((std::vector<double>{0, expected_stim0, 0}), traces[0][0]);
+    EXPECT_EQ((std::vector<double>{0, 0, expected_stim1}), traces[1][0]);
+    EXPECT_EQ((std::vector<double>(3)), traces[0][1]);
+    EXPECT_EQ((std::vector<double>(3)), traces[1][1]);
 }
-#endif
 
 template <typename Backend>
 void run_exact_sampling_probe_test(const context& ctx) {

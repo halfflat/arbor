@@ -751,6 +751,7 @@ fvm_mechanism_data& append(fvm_mechanism_data& left, const fvm_mechanism_data& r
     }
 
     append(left.stimuli.cv, right.stimuli.cv);
+    append(left.stimuli.cv_unique, right.stimuli.cv_unique);
     append(left.stimuli.frequency, right.stimuli.frequency);
     append(left.stimuli.envelope_time, right.stimuli.envelope_time);
     append(left.stimuli.envelope_amplitude, right.stimuli.envelope_amplitude);

@@ -916,7 +916,6 @@ void resolve_probe(const cable_probe_stimulus_current_cell& p, probe_resolution_
     const auto& stim_cvs = R.M.stimuli.cv_unique;
     const fvm_value_type* src = R.state->stim_data.accu_stim_.data();
 
-    fvm_probe_weighted_multi r;
     for (auto cv: R.D.geometry.cell_cvs(R.cell_idx)) {
         auto opt_i = util::binary_search_index(stim_cvs, cv);
         if (!opt_i) continue;
