@@ -1,3 +1,4 @@
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -353,9 +354,6 @@ TEST(fvm_lowered, stimulus) {
     const fvm_size_type soma_cv = 0u;
     const fvm_size_type tip_cv = 5u;
 
-    // now we have two stims :
-    //
-    //
     // The implementation of the stimulus is tested by creating a lowered cell, then
     // testing that the correct currents are injected at the correct control volumes
     // as during the stimulus windows.
@@ -407,6 +405,59 @@ TEST(fvm_lowered, stimulus) {
     state.add_stimulus_current();
     EXPECT_TRUE(near_relative(-0.2, J[soma_cv]*A[soma_cv]*unit_factor, reltol));
     EXPECT_TRUE(near_relative(-0.3, J[tip_cv]*A[tip_cv]*unit_factor, reltol));
+}
+
+TEST(fvm_lowered, ac_stimulus) {
+    // Simple cell (one CV) with oscillating stimulus.
+
+    arb::execution_context context; // Just use default context for this one!
+
+    decor dec;
+    segment_tree tree;
+    tree.append(mnpos, {0., 0., 0., 1.}, {100., 0., 0., 1.}, 1);
+
+    const double freq = 20; // (Hz)
+    const double max_amplitude = 30; // (nA)
+    const double max_time = 8; // (ms)
+
+    // Envelope is linear ramp from 0 to max_time.
+    dec.place(mlocation{0, 0}, i_clamp({{0, 0}, {max_time, max_amplitude}, {max_time, 0}}, freq));
+    std::vector<cable_cell> cells = {cable_cell(tree, {}, dec)};
+
+    cable_cell_global_properties gprop;
+    gprop.default_parameters = neuron_parameter_defaults;
+
+    fvm_cv_discretization D = fvm_cv_discretize(cells, gprop.default_parameters, context);
+    const auto& A = D.cv_area;
+
+    std::vector<target_handle> targets;
+    probe_association_map probe_map;
+    std::vector<fvm_index_type> cell_to_intdom(cells.size(), 0);
+
+    fvm_cell fvcell(context);
+    fvcell.initialize({0}, cable1d_recipe(cells), cell_to_intdom, targets, probe_map);
+
+    auto& state = *(fvcell.*private_state_ptr).get();
+    auto& J = state.current_density;
+    auto& T = state.time;
+
+    // Current from t = 0 to max_time should be given by
+    //     I = max_amplitude * t/max_time * sin(2π f t)
+    // where t is in ms and f = freq/1000 is the frequency in kHz.
+
+    constexpr double reltol = 1e-10;
+    using testing::near_relative;
+
+    for (double t: {0., 0.1*max_time, 0.7*max_time, 1.1*max_time}) {
+        constexpr double unit_factor = 1e-3; // scale A/m²·µm² to nA
+
+        memory::fill(J, 0.);
+        memory::fill(T, t);
+        state.add_stimulus_current();
+
+        double expected_I = t<=max_time? max_amplitude*t/max_time*std::sin(2*math::pi<double>*t*0.001*freq): 0;
+        EXPECT_TRUE(near_relative(-expected_I, J[0]*A[0]*unit_factor, reltol));
+    }
 }
 
 // Test derived mechanism behaviour.

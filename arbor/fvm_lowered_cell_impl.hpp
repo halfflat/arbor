@@ -891,6 +891,9 @@ void resolve_probe(const cable_probe_total_current_cell& p, probe_resolution_dat
         [cv0](auto cv) { return cv+1==0? cv: cv-cv0; }));
     util::assign(r.cv_parent_cond, util::subrange_view(R.D.face_conductance, cell_cv_ival));
 
+    const auto& stim_cvs = R.M.stimuli.cv_unique;
+    const fvm_value_type* stim_src = R.state->stim_data.accu_stim_.data();
+
     r.cv_cables_divs = {0};
     for (auto cv: R.D.geometry.cell_cvs(R.cell_idx)) {
         r.raw_handles.push_back(R.state->voltage.data()+cv);
@@ -904,6 +907,14 @@ void resolve_probe(const cable_probe_total_current_cell& p, probe_resolution_dat
             }
         }
         r.cv_cables_divs.push_back(r.metadata.size());
+    }
+    for (auto cv: R.D.geometry.cell_cvs(R.cell_idx)) {
+        auto opt_i = util::binary_search_index(stim_cvs, cv);
+        if (!opt_i) continue;
+
+        r.raw_handles.push_back(stim_src+*opt_i);
+        r.stim_cv.push_back(cv-cv0);
+        r.stim_scale.push_back(0.001*R.D.cv_area[cv]); // Scale from [µm²·A/m²] to [nA].
     }
     r.shrink_to_fit();
     R.result.push_back(std::move(r));

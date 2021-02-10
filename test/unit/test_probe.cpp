@@ -1,6 +1,7 @@
 #include "../gtest.h"
 
 #include <cmath>
+#include <map>
 #include <vector>
 
 #include <arbor/cable_cell.hpp>
@@ -1049,6 +1050,7 @@ void run_total_current_probe_test(const context& ctx) {
 
     trace_data<std::vector<double>, mcable_list> traces[2]; 
     trace_data<std::vector<double>, mcable_list> ion_traces[2];
+    trace_data<std::vector<double>, mcable_list> stim_traces[2];
 
     // Run the cells sampling at τ and 20τ for both total membrane
     // current and total membrane ionic current.
@@ -1072,6 +1074,9 @@ void run_total_current_probe_test(const context& ctx) {
             ion_traces[i] = run_simple_sampler<std::vector<double>, mcable_list>(ctx, t_end, cells, i,
                     cable_probe_total_ion_current_cell{}, {tau, 20*tau}).at(0);
 
+            stim_traces[i] = run_simple_sampler<std::vector<double>, mcable_list>(ctx, t_end, cells, i,
+                    cable_probe_stimulus_current_cell{}, {tau, 20*tau}).at(0);
+
             ASSERT_EQ(2u, traces[i].size());
             ASSERT_EQ(2u, ion_traces[i].size());
 
@@ -1089,31 +1094,51 @@ void run_total_current_probe_test(const context& ctx) {
             EXPECT_EQ(ion_traces[i][0].v.size(), traces[i][0].v.size());
             EXPECT_EQ(ion_traces[i][1].v.size(), traces[i][1].v.size());
 
-            // Check total membrane currents are individually non-zero, but sum is, both
-            // at t=τ (j=0) and t=20τ (j=1).
+            // Check total membrane currents + stimulus currents are individually non-zero, but sum is,
+            // both at t=τ (j=0) and t=20τ (j=1).
 
+            std::map<mcable, double> stim_currents[2];
             for (unsigned j: {0u, 1u}) {
-                double max_abs_i_memb = 0;
-                double sum_i_memb = 0;
-                for (auto i_memb: traces[i][j].v) {
-                    EXPECT_NE(0.0, i_memb);
-                    max_abs_i_memb = std::max(max_abs_i_memb, std::abs(i_memb));
-                    sum_i_memb += i_memb;
+                for (auto k: util::count_along(stim_traces[i].meta)) {
+                    stim_currents[j][stim_traces[i].meta[k]] = stim_traces[i][j].v[k];
                 }
-
-                EXPECT_NEAR(0.0, sum_i_memb, 1e-6*max_abs_i_memb);
             }
 
-            // Confirm that total and ion currents differ at τ but are close at 20τ.
+            for (unsigned j: {0u, 1u}) {
+                double max_abs_current = 0;
+                double sum_current = 0;
+                for (auto k: util::count_along(traces[i].meta)) {
+                    mcable cable = traces[i].meta[k];
+
+                    double current = traces[i][j].v[k];
+                    current += stim_currents[j].count(cable)? stim_currents[j][cable]: 0;
+
+                    EXPECT_NE(0.0, current);
+                    max_abs_current = std::max(max_abs_current, std::abs(current));
+                    sum_current += current;
+                }
+
+                ASSERT_NEAR(0.0, sum_current, 1e-6*max_abs_current);
+            }
+
+            // Confirm that total+stim and ion currents differ at τ but are close at 20τ.
 
             for (unsigned k = 0; k<traces[i].size(); ++k) {
                 const double rtol_large = 1e-3;
-                EXPECT_FALSE(testing::near_relative(traces[i][0].v.at(k), ion_traces[i][0].v.at(k), rtol_large));
+
+                mcable cable = traces[i].meta[k];
+                double current = traces[i][0].v[k];
+                current += stim_currents[0].count(cable)? stim_currents[0][cable]: 0;
+                EXPECT_FALSE(testing::near_relative(current, ion_traces[i][0].v.at(k), rtol_large));
             }
 
             for (unsigned k = 0; k<traces[i].size(); ++k) {
                 const double rtol_small = 1e-6;
-                EXPECT_TRUE(testing::near_relative(traces[i][1].v.at(k), ion_traces[i][1].v.at(k), rtol_small));
+
+                mcable cable = traces[i].meta[k];
+                double current = traces[i][1].v[k];
+                current += stim_currents[1].count(cable)? stim_currents[1][cable]: 0;
+                EXPECT_TRUE(testing::near_relative(current, ion_traces[i][1].v.at(k), rtol_small));
             }
 
         }

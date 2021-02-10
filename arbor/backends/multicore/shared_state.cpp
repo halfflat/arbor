@@ -138,7 +138,7 @@ void istim_state::reset() {
 }
 
 void istim_state::add_current(const array& time, const iarray& cv_to_intdom, array& current_density) {
-    constexpr double freq_scale = math::pi<double>*0.001;
+    constexpr double freq_scale = 2*math::pi<double>*0.001;
 
     // Consider vectorizing...
     for (auto i: util::count_along(accu_index_)) {
@@ -168,7 +168,7 @@ void istim_state::add_current(const array& time, const iarray& cv_to_intdom, arr
         }
 
         if (frequency_[i]) {
-            J *= std::sin(freq_scale*t);
+            J *= std::sin(freq_scale*frequency_[i]*t);
         }
 
         accu_stim_[ai] += J;

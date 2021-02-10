@@ -86,13 +86,16 @@ struct fvm_probe_weighted_multi {
 
 // Trans-membrane currents require special handling!
 struct fvm_probe_membrane_currents {
-    std::vector<probe_handle> raw_handles; // Voltage per CV, followed by stim current per CV.
+    std::vector<probe_handle> raw_handles; // Voltage per CV, followed by stim current densities.
     std::vector<mcable> metadata;          // Cables from each CV, in CV order.
 
     std::vector<unsigned> cv_parent;       // Parent CV index for each CV.
     std::vector<double> cv_parent_cond;    // Face conductance between CV and parent.
     std::vector<double> weight;            // Area of cable : area of CV.
     std::vector<unsigned> cv_cables_divs;  // Partitions metadata by CV index.
+
+    std::vector<double> stim_scale;        // CV area for scaling raw stim current densities.
+    std::vector<unsigned> stim_cv;         // CV index corresponding to each stim raw handle.
 
     void shrink_to_fit() {
         raw_handles.shrink_to_fit();
@@ -101,6 +104,8 @@ struct fvm_probe_membrane_currents {
         cv_parent_cond.shrink_to_fit();
         weight.shrink_to_fit();
         cv_cables_divs.shrink_to_fit();
+        stim_scale.shrink_to_fit();
+        stim_cv.shrink_to_fit();
     }
 
     util::any_ptr get_metadata_ptr() const { return &metadata; }

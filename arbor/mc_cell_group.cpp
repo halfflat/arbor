@@ -256,6 +256,8 @@ void run_samples(
     const auto n_cable = p.metadata.size();
     const auto n_cv = p.cv_parent_cond.size();
     const auto cables_by_cv = util::partition_view(p.cv_cables_divs);
+    const auto n_stim = p.stim_scale.size();
+    arb_assert(n_stim+n_cv==(unsigned)n_raw_per_sample);
 
     auto& sample_ranges = std::get<std::vector<cable_sample_range>>(scratch);
     sample_ranges.clear();
@@ -291,6 +293,16 @@ void run_samples(
             }
         }
 
+        const double* stim = raw_samples+offset+n_cv;
+        for (auto i: util::make_span(n_stim)) {
+            double cv_stim_I = stim[i]*p.stim_scale[i];
+            unsigned cv = p.stim_cv[i];
+            arb_assert(cv<n_cv);
+
+            for (auto cable_i: util::make_span(cables_by_cv[cv])) {
+                tmp_base[cable_i] -= cv_stim_I*p.weight[cable_i];
+            }
+        }
         sample_ranges.push_back({tmp_base, tmp_base+n_cable});
     }
 
