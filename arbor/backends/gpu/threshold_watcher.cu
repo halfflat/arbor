@@ -3,19 +3,13 @@
 #include <arbor/fvm_types.hpp>
 
 #include "backends/threshold_crossing.hpp"
-#include "gpu_common.hpp"
+#include "math_cu.hpp"
 #include "stack_cu.hpp"
 
 namespace arb {
 namespace gpu {
 
 namespace kernel {
-
-template <typename T>
-__device__
-inline T lerp(T a, T b, T u) {
-    return std::fma(u, b, std::fma(-u, a, a));
-}
 
 /// kernel used to test for threshold crossing test code.
 /// params:

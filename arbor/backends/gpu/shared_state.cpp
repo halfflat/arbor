@@ -86,6 +86,76 @@ void ion_state::reset() {
     memory::copy(init_eX_, eX_);
 }
 
+// istim_state methods:
+
+istim_state::istim_state(const fvm_stimulus_config& stim_data, const array& time, const iarray& cv_to_intdom, array& current_density):
+    frequency_(stim.frequency)
+{
+    using util::assign;
+
+    // Translate instance-to-CV index from stim to istim_state index vectors.
+    std::vector<double> accu_index_stage;
+    assign(accu_index_stage, util::index_into(stim.cv, stim.cv_unique));
+
+    std::vector<double> accu_stim_stage;
+    accu_stim_stage.resize(stim.cv_unique.size());
+
+    std::size_t n = accu_index_stage.size();
+    std::vector<fvm_value_type> envl_a, envl_t;
+    std::vector<fvm_index_type> edivs;
+
+    arb_assert(n==frequency_.size());
+    arb_assert(n==stim.envelope_time.size());
+    arb_assert(n==stim.envelope_amplitude.size());
+
+    edivs.reserve(n+1);
+    edivs.push_back(0);
+
+    for (auto i: util::make_span(n)) {
+        arb_assert(stim.envelope_time[i].size()==stim.envelope_amplitude[i].size());
+        arb_assert(util::is_sorted(stim.envelope_time[i]));
+
+        util::append(envl_a, stim.envelope_amplitude[i]);
+        util::append(envl_t, stim.envelope_time[i]);
+        edivs.push_back(fvm_index_type(envl_t.size()));
+    }
+
+    accu_index_ = array(accy_index_stage);
+    accu_to_cv_ = array(stim.cv_unique);
+    envl_amplitudes_ = array(envl_a);
+    envl_times_ = array(envl_t);
+    envl_divs_ = array(edivs);
+
+    // Initial indices into envelope match partition divisions; ignore last (index n) element.
+    envl_index_ = envl_divs_;
+
+    // Initialize ppack pointers.
+    ppack_.accu_index = accu_index_.data();
+    ppack_.accu_to_cv = accu_to_cv_.data();
+    ppack_.frequency = frequency_.data();
+    ppack_.envl_amplitudes = envl_amplitudes_.data();
+    ppack_.envl_times = envl_times_.data();
+    ppack_.envl_divs = envl_divs_.data();
+    ppack_.accu_stim = accu_stim_.data();
+    ppack_.envl_index = accu_envl_.data();
+    ppack_.time = time.data();
+    ppack_.cv_to_intdom = cv_to_intdom.data();
+    ppack_.current_density = current_density.data();
+}
+
+void istim_stae::zero_current() {
+    gpu::fill(accu_stim_, 0);
+}
+
+void istim_state::reset() {
+    zero_current();
+    memory::copy(envl_divs_, envl_index_);
+}
+
+void istim_state::add_current() {
+    istim_add_current_impl(accu_index_.size(), ppack_);
+}
+
 // Shared state methods:
 
 shared_state::shared_state(
@@ -136,6 +206,10 @@ void shared_state::add_ion(
         std::forward_as_tuple(charge, ion_info, 1u));
 }
 
+void shared_state::configure_sitmulus(const fvm_stimulus_config& stims) {
+    stim_data = istim_state(stims);
+}
+
 void shared_state::reset() {
     memory::copy(init_voltage, voltage);
     memory::fill(current_density, 0);
@@ -147,6 +221,7 @@ void shared_state::reset() {
     for (auto& i: ion_data) {
         i.second.reset();
     }
+    stim_data.reset();
 }
 
 void shared_state::zero_currents() {
@@ -155,6 +230,7 @@ void shared_state::zero_currents() {
     for (auto& i: ion_data) {
         i.second.zero_current();
     }
+    stim_data.zero_current();
 }
 
 void shared_state::ions_init_concentration() {

@@ -155,7 +155,7 @@ void istim_state::add_current(const array& time, const iarray& cv_to_intdom, arr
 
         if (ei_left==ei_right || t<envl_times_[ei_left]) continue;
 
-        auto& ei = envl_index_[i];
+        fvm_index_type& ei = envl_index_[i];
         while (ei+1<ei_right && envl_times_[ei+1]<=t) ++ei;
 
         double J = envl_amplitudes_[ei]; // current density (A/m²)
