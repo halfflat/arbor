@@ -10,6 +10,7 @@
 #include "backends/multi_event_stream_state.hpp"
 #include "memory/copy.hpp"
 #include "memory/wrappers.hpp"
+#include "util/index_into.hpp"
 #include "util/rangeutil.hpp"
 
 using arb::memory::make_const_view;
@@ -88,21 +89,18 @@ void ion_state::reset() {
 
 // istim_state methods:
 
-istim_state::istim_state(const fvm_stimulus_config& stim_data, const array& time, const iarray& cv_to_intdom, array& current_density):
-    frequency_(stim.frequency)
-{
+istim_state::istim_state(const fvm_stimulus_config& stim, const array& time, const iarray& cv_to_intdom, array& current_density) {
     using util::assign;
 
     // Translate instance-to-CV index from stim to istim_state index vectors.
-    std::vector<double> accu_index_stage;
+    std::vector<fvm_index_type> accu_index_stage;
     assign(accu_index_stage, util::index_into(stim.cv, stim.cv_unique));
-
-    std::vector<double> accu_stim_stage;
-    accu_stim_stage.resize(stim.cv_unique.size());
 
     std::size_t n = accu_index_stage.size();
     std::vector<fvm_value_type> envl_a, envl_t;
     std::vector<fvm_index_type> edivs;
+
+    frequency_ = make_const_view(stim.frequency);
 
     arb_assert(n==frequency_.size());
     arb_assert(n==stim.envelope_time.size());
@@ -120,11 +118,12 @@ istim_state::istim_state(const fvm_stimulus_config& stim_data, const array& time
         edivs.push_back(fvm_index_type(envl_t.size()));
     }
 
-    accu_index_ = array(accy_index_stage);
-    accu_to_cv_ = array(stim.cv_unique);
-    envl_amplitudes_ = array(envl_a);
-    envl_times_ = array(envl_t);
-    envl_divs_ = array(edivs);
+    accu_index_ = make_const_view(accu_index_stage);
+    accu_to_cv_ = make_const_view(stim.cv_unique);
+    accu_stim_ = array(accu_index_.size());
+    envl_amplitudes_ = make_const_view(envl_a);
+    envl_times_ = make_const_view(envl_t);
+    envl_divs_ = make_const_view(edivs);
 
     // Initial indices into envelope match partition divisions; ignore last (index n) element.
     envl_index_ = envl_divs_;
@@ -137,14 +136,18 @@ istim_state::istim_state(const fvm_stimulus_config& stim_data, const array& time
     ppack_.envl_times = envl_times_.data();
     ppack_.envl_divs = envl_divs_.data();
     ppack_.accu_stim = accu_stim_.data();
-    ppack_.envl_index = accu_envl_.data();
+    ppack_.envl_index = envl_index_.data();
     ppack_.time = time.data();
     ppack_.cv_to_intdom = cv_to_intdom.data();
     ppack_.current_density = current_density.data();
 }
 
-void istim_stae::zero_current() {
-    gpu::fill(accu_stim_, 0);
+std::size_t istim_state::size() const {
+    return frequency_.size();
+}
+
+void istim_state::zero_current() {
+    memory::fill(accu_stim_, 0.);
 }
 
 void istim_state::reset() {
@@ -153,7 +156,7 @@ void istim_state::reset() {
 }
 
 void istim_state::add_current() {
-    istim_add_current_impl(accu_index_.size(), ppack_);
+    istim_add_current_impl((int)size(), ppack_);
 }
 
 // Shared state methods:
@@ -206,8 +209,8 @@ void shared_state::add_ion(
         std::forward_as_tuple(charge, ion_info, 1u));
 }
 
-void shared_state::configure_sitmulus(const fvm_stimulus_config& stims) {
-    stim_data = istim_state(stims);
+void shared_state::configure_stimulus(const fvm_stimulus_config& stims) {
+    stim_data = istim_state(stims, time, cv_to_intdom, current_density);
 }
 
 void shared_state::reset() {
@@ -249,6 +252,10 @@ void shared_state::set_dt() {
 
 void shared_state::add_gj_current() {
     add_gj_current_impl(n_gj, gap_junctions.data(), voltage.data(), current_density.data());
+}
+
+void shared_state::add_stimulus_current() {
+     stim_data.add_current();
 }
 
 std::pair<fvm_value_type, fvm_value_type> shared_state::time_bounds() const {

@@ -29,7 +29,7 @@ void istim_add_current_impl(int n, istim_pp pp) {
     fvm_index_type cv = pp.accu_to_cv[ai];
     double t = pp.time[pp.cv_to_intdom[cv]];
 
-    if (ei_left==ei_right || t<pp.envl_times[ei_left]) continue;
+    if (ei_left==ei_right || t<pp.envl_times[ei_left]) return;
 
     fvm_index_type& ei = pp.envl_index[i];
     while (ei+1<ei_right && pp.envl_times[ei+1]<=t) ++ei;
@@ -38,7 +38,7 @@ void istim_add_current_impl(int n, istim_pp pp) {
     if (ei+1<ei_right) {
         // linearly interpolate:
         double J1 = pp.envl_amplitudes[ei+1];
-        double u = (t-pp.envl_times[ei])/(pp.envl_times_[ei+1]-pp.envl_times_[ei]);
+        double u = (t-pp.envl_times[ei])/(pp.envl_times[ei+1]-pp.envl_times[ei]);
         J = lerp(J, J1, u);
     }
 
@@ -46,8 +46,8 @@ void istim_add_current_impl(int n, istim_pp pp) {
         J *= std::sin(freq_scale*f*t);
     }
 
-    gpu_atomic_add(pp.accu_stim_[ai], J);
-    gpu_atomic_sub(pp.current_density[cv], J);
+    gpu_atomic_add(&pp.accu_stim[ai], J);
+    gpu_atomic_sub(&pp.current_density[cv], J);
 }
 
 } // namespace kernel

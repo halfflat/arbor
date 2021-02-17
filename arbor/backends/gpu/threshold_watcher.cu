@@ -61,7 +61,7 @@ void test_thresholds_impl(
                 // The threshold has been passed, so estimate the time using
                 // linear interpolation
                 auto pos = (thresh - v_prev)/(v - v_prev);
-                crossing_time = lerp(t_before[intdom], t_after[intdom], pos);
+                crossing_time = gpu::lerp(t_before[intdom], t_after[intdom], pos);
 
                 if (record_time_since_spike) {
                     time_since_spike[spike_idx] = t_after[intdom] - crossing_time;
