@@ -89,7 +89,7 @@ void ion_state::reset() {
 
 // istim_state methods:
 
-istim_state::istim_state(const fvm_stimulus_config& stim, const array& time, const iarray& cv_to_intdom, array& current_density) {
+istim_state::istim_state(const fvm_stimulus_config& stim) {
     using util::assign;
 
     // Translate instance-to-CV index from stim to istim_state index vectors.
@@ -137,9 +137,9 @@ istim_state::istim_state(const fvm_stimulus_config& stim, const array& time, con
     ppack_.envl_divs = envl_divs_.data();
     ppack_.accu_stim = accu_stim_.data();
     ppack_.envl_index = envl_index_.data();
-    ppack_.time = time.data();
-    ppack_.cv_to_intdom = cv_to_intdom.data();
-    ppack_.current_density = current_density.data();
+    ppack_.time = nullptr; // These fields must be set in add_current() before queing kernel.
+    ppack_.cv_to_intdom = nullptr;
+    ppack_.current_density = nullptr;
 }
 
 std::size_t istim_state::size() const {
@@ -155,7 +155,10 @@ void istim_state::reset() {
     memory::copy(envl_divs_, envl_index_);
 }
 
-void istim_state::add_current() {
+void istim_state::add_current(const array& time, const iarray& cv_to_intdom, array& current_density) {
+    ppack_.time = time.data();
+    ppack_.cv_to_intdom = cv_to_intdom.data();
+    ppack_.current_density = current_density.data();
     istim_add_current_impl((int)size(), ppack_);
 }
 
@@ -210,7 +213,7 @@ void shared_state::add_ion(
 }
 
 void shared_state::configure_stimulus(const fvm_stimulus_config& stims) {
-    stim_data = istim_state(stims, time, cv_to_intdom, current_density);
+    stim_data = istim_state(stims);
 }
 
 void shared_state::reset() {
@@ -255,7 +258,7 @@ void shared_state::add_gj_current() {
 }
 
 void shared_state::add_stimulus_current() {
-     stim_data.add_current();
+    stim_data.add_current(time, cv_to_intdom, current_density);
 }
 
 std::pair<fvm_value_type, fvm_value_type> shared_state::time_bounds() const {

@@ -86,13 +86,13 @@ struct istim_state {
     void reset();
 
     // Contribute to current density:
-    void add_current();
+    void add_current(const array& time, const iarray& cv_to_intdom, array& current_density);
 
     // Number of stimuli:
     std::size_t size() const;
 
     // Construct state from i_clamp data; references to shared state vectors are used to initialize ppack.
-    istim_state(const fvm_stimulus_config& stim_data, const array& time, const iarray& cv_to_intdom, array& current_density);
+    istim_state(const fvm_stimulus_config& stim_data);
 
     istim_state() = default;
 };
