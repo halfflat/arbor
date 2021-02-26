@@ -290,12 +290,12 @@ void register_cells(pybind11::module& m) {
         .def(pybind11::init(
                 [](double ts, double dur, double cur, double frequency) {
                     return arb::i_clamp{ts, dur, cur, frequency};
-                }), "tstart"_a=0, "duration"_a=0, "current"_a=0, "frequency"_a=0,
+                }), "tstart"_a, "duration"_a, "current"_a, "frequency"_a=0,
                 "Construct finite duration current clamp, constant amplitude")
         .def(pybind11::init(
                 [](double cur, double frequency) {
                     return arb::i_clamp{cur, frequency};
-                }), "current"_a=0, "frequency"_a=0,
+                }), "current"_a, "frequency"_a=0,
                 "Construct constant amplitude current clamp")
         .def(pybind11::init(
                 [](std::vector<std::pair<double, double>> envl, double frequency) {

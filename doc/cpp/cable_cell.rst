@@ -422,7 +422,7 @@ Membrane current density at given locations _excluding_ capacitive currents.
 
     struct cable_probe_total_ion_current_cell {};
 
-Membrane current _excluding_ capacitive currents across components of the cell.
+Membrane current _excluding_ capacitive currents and stimuli across components of the cell.
 
 *  Sample value: ``cable_sample_range``. Each value is the current in
    nanoamperes across an unbranched component of the cell, as determined
@@ -436,11 +436,25 @@ Membrane current _excluding_ capacitive currents across components of the cell.
 
     struct cable_probe_total_current_cell {};
 
-Total membrance current across components of the cell.
+Total membrane current excluding current stimuli across components of the cell.
 
 *  Sample value: ``cable_sample_range``. Each value is the current in
    nanoamperes across an unbranched component of the cell, as determined
    by the discretisation.
+
+*  Metadata: ``mcable_list``. Each cable in the cable list describes
+   the unbranched component for the corresponding sample value.
+
+.. code::
+
+    struct cable_probe_stimulus_current_cell {};
+
+Total stimulus currents applied across components of the cell.
+
+*  Sample value: ``cable_sample_range``. Each value is the current in
+   nanoamperes across an unbranched component of the cell, as determined
+   by the discretisation. Components of CVs where no stimulus is present
+   will not be included in the sample data.
 
 *  Metadata: ``mcable_list``. Each cable in the cable list describes
    the unbranched component for the corresponding sample value.
