@@ -57,13 +57,23 @@ TEST(simulation, spike_global_callback) {
     simulation sim(rec, decomp, ctx);
 
     std::vector<spike> collected;
-    sim.set_global_spike_callback([&](const std::vector<spike>& spikes) {
+    double t_upto = 0;
+    bool t_bounds_fail = false;
+    sim.set_global_spike_callback([&](const std::vector<spike>& spikes, arb::time_type t) {
+        if (t<t_upto) t_bounds_fail = true;
+        for (auto x: spikes) {
+            if (x.time>t) t_bounds_fail = true;
+        }
         collected.insert(collected.end(), spikes.begin(), spikes.end());
+        t_upto = t;
     });
 
     double tfinal = 0.7*t_max;
     constexpr double dt = 0.01;
     sim.run(tfinal, dt);
+
+    EXPECT_FALSE(t_bounds_fail);
+    EXPECT_EQ(tfinal, t_upto);
 
     auto spike_lt = [](spike a, spike b) { return a.time<b.time || (a.time==b.time && a.source<b.source); };
     std::sort(expected_spikes.begin(), expected_spikes.end(), spike_lt);
@@ -140,7 +150,7 @@ TEST(simulation, restart) {
     simulation sim(rec, decomp, ctx);
 
     std::vector<spike> collected;
-    sim.set_global_spike_callback([&](const std::vector<spike>& spikes) {
+    sim.set_global_spike_callback([&](const std::vector<spike>& spikes, arb::time_type) {
         collected.insert(collected.end(), spikes.begin(), spikes.end());
     });
 

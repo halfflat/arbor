@@ -16,7 +16,11 @@
 
 namespace arb {
 
-using spike_export_function = std::function<void(const std::vector<spike>&)>;
+//using spike_export_function = std::function<void(const std::vector<spike>&)>;
+
+// Parameters: vector of spikes generated in the last epoch (local or global); end time
+// of that epoch.
+using spike_export_function = std::function<void(const std::vector<spike>&, arb::time_type)>;
 
 // simulation_state comprises private implementation for simulation class.
 class simulation_state;

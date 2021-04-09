@@ -232,7 +232,7 @@ TEST(SPIKES_TEST_CLASS, threshold_watcher_interpolation) {
         arb::simulation sim(rec, decomp, context);
 
         sim.set_global_spike_callback(
-                [&spikes](const std::vector<arb::spike>& recorded_spikes) {
+                [&spikes](const std::vector<arb::spike>& recorded_spikes, arb::time_type) {
                     spikes.insert(spikes.end(), recorded_spikes.begin(), recorded_spikes.end());
                 });
 

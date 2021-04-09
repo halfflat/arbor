@@ -220,7 +220,7 @@ TEST(lif_cell_group, ring)
     std::vector<spike> spike_buffer;
 
     sim.set_global_spike_callback(
-        [&spike_buffer](const std::vector<spike>& spikes) {
+        [&spike_buffer](const std::vector<spike>& spikes, arb::time_type) {
             spike_buffer.insert(spike_buffer.end(), spikes.begin(), spikes.end());
         }
     );

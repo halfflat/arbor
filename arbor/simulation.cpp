@@ -352,10 +352,10 @@ time_type simulation_state::run(time_type tfinal, time_type dt) {
         // Present spikes to user-supplied callbacks.
         PE(communication_spikeio);
         if (local_export_callback_) {
-            local_export_callback_(all_local_spikes);
+            local_export_callback_(all_local_spikes, prev.t1);
         }
         if (global_export_callback_) {
-            global_export_callback_(global_spikes.values());
+            global_export_callback_(global_spikes.values(), prev.t1);
         }
         PL();
 

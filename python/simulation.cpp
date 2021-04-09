@@ -86,7 +86,7 @@ public:
     }
 
     void record(spike_recording policy) {
-        auto spike_recorder = [this](const std::vector<arb::spike>& spikes) {
+        auto spike_recorder = [this](const std::vector<arb::spike>& spikes, arb::time_type) {
             spike_record_.insert(spike_record_.end(), spikes.begin(), spikes.end());
         };
 

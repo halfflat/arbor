@@ -24,7 +24,7 @@ struct spike_callback {
         spike_store(state)
     {}
 
-    void operator() (const spike_vec& spikes) {
+    void operator() (const spike_vec& spikes, arb::time_type) {
         spike_store->insert(spike_store->end(), spikes.begin(), spikes.end());
     };
 };

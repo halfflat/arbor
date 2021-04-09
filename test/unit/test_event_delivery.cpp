@@ -69,7 +69,7 @@ std::vector<cell_gid_type> run_test_sim(const recipe& R, const group_gids_type& 
 
     simulation sim(R, D, ctx);
     sim.set_global_spike_callback(
-            [&spikes](const std::vector<spike>& ss) {
+            [&spikes](const std::vector<spike>& ss, arb::time_type) {
                 spikes.insert(spikes.end(), ss.begin(), ss.end());
             });
 
