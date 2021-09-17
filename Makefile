@@ -15,6 +15,7 @@ depends:=$(patsubst %.cc,%.d,$(sources))
 OPTFLAGS?=-O3 -march=native
 CXXFLAGS+=$(OPTFLAGS) -MMD -MP -std=c++14 -g
 CPPFLAGS+=-I $(srcdir)
+LDFLAGS+=-lhpx -lhpx_init -lhpx_iostream -lboost_program_options -lboost_system
 
 -include $(depends)
 

@@ -7,6 +7,8 @@
 
 const std::string usage_str =
 "mocksim [OPTION]\n"
+"  -i, --impl=IMPL        run with implementation IMPL, which cam be\n"
+"                         'serial' or 'hpx' [default: serial]\n"
 "  -n, --cells=N          simulate N cells per (virtual) rank [default: 1]\n"
 "  -t, --time=T           run for T ms of simulated time [default: 1000]\n"
 "  -g, --group-size=LIST  take group sizes from values in comma-separated\n"
@@ -21,7 +23,12 @@ const std::string usage_str =
 "\n"
 "  -h, --help          display this help and exit\n";
 
+enum class impl_enum {
+    serial, hpx
+};
+
 struct global_options {
+    impl_enum impl = impl_enum::serial;
     int n_cell = 1;
     double sim_time = 1000.;
     std::vector<int> group_sizes = {1};
@@ -53,12 +60,6 @@ delimited_wrapper<T> delimited(const T& item, const std::string& delimiter) {
     return delimited_wrapper<T>(item, delimiter);
 }
 
-struct sputs: public std::ostream {
-    sputs(): sputs(std::cout) {}
-    sputs(std::ostream& o): std::ostream(o.rdbuf()) {}
-    ~sputs() { *this << '\n'; }
-};
-
 int main(int argc, char** argv) {
     try {
         using namespace to;
@@ -66,9 +67,15 @@ int main(int argc, char** argv) {
         global_options opt;
         delimited_parser<int> csv(",");
 
+        std::vector<std::pair<const char*, impl_enum>> impls = {
+            {impl_enum::serial, "serial"},
+            {impl_enum::channel, "hpxchannel"},
+        };
+
         for (auto arg = argv+1; *arg; ) {
             [&]() {opt.help = true; }    << parse_opt(arg, 'h', "help") ||
             [&]() {opt.verbose = true; } << parse_opt(arg, 'v', "verbose") ||
+            opt.impl                     << parse_opt<impl_enum>(arg, 'i', "impl", keywords(impls)) ||
             opt.n_cell                   << parse_opt<int>(arg, 'n', "cells") ||
             opt.sim_time                 << parse_opt<double>(arg, 't', "time") ||
             opt.group_sizes              << parse_opt<std::vector<int>>(arg, 'g', "group-size", csv) ||
@@ -90,6 +97,11 @@ int main(int argc, char** argv) {
         if (opt.verbose) {
             std::cout
                 << "option summary:\n"
+                << "implementation:          " << (
+                    opt.impl==impl_enum::serial? "serial":
+                    opt.impl==impl_enum::hpx? "hpx":
+                    "unknown"
+                   ) << "\n"
                 << "number of cells:         " << opt.n_cell << "\n"
                 << "simulation time:         " << opt.sim_time << "\n"
                 << "cell group sizes:        " << delimited(opt.group_sizes, ", ") << "\n"
@@ -121,7 +133,18 @@ int main(int argc, char** argv) {
         }
 
         cell_group_partition partn(groups);
-        auto sim = std::unique_ptr<simulation>(new serial_simulation(partn, mparam));
+        std::unique_ptr<simulation> sim;
+        switch (opt.impl) {
+        case impl_enum::serial:
+            sim = std::make_unique<serial_simulation>(partn, mparam);
+            break;
+        case impl_enum::hpx:
+            sim = std::make_unique<hpx_simulation>(partn, mparam);
+            break;
+        default: ;
+        }
+        if (!sim) throw std::runtime_error("failed to make the simulator");
+
         sim->run(opt.sim_time);
 
         auto group_time_span = sim->time_minmax();
