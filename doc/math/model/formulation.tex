@@ -8,51 +8,99 @@ The one-dimensional cable equation introduced later in equations~\eq{eq:cable} a
     \nabla \cdot \vv{J} = 0,
     \label{eq:J}
 \end{equation}
-where $\vv{J}$ is current density (units $A/m^2$).
-Current density is in turn defined in terms of electric field $\vv{E}$ (units $V/m$)
+where $\vv{J}$ is current density.
+Current density is in turn defined in terms of electric field $\vv{E}$ by
 \begin{equation}
     \vv{J} = \sigma \vv{E},
 \end{equation}
+under the assumption that the intracellular medium is ohmic.
 where $\sigma$ is the specific electrical conductivity of intra-cellular fluid (typically 3.3 $S/m$).
 
-The derivation of the cable equation is based on two assumptions:
+The derivation of the cable equation is based on two further assumptions:
 \begin{enumerate}
     \item that charge disperion is effectively instantaneous for the purposes of dendritic modelling.
-    \item that diffusion of magnetic field is instant, i.e. it behaves quasi-statically in the sense that it is determined by the electric field through the Maxwell equations.
+    \item that diffusion of magnetic field is instant, that is, it behaves quasi-statically in the sense that it is determined by the electric field through the Maxwell equations.
 \end{enumerate}
+These correspond to the electroquasistatic (EQS) limit for the Maxwell equations.
 Under these conditions, $\vv{E}$ is conservative, and as such can be expressed in terms of a potential field
 \begin{equation}
     \vv{E} = \nabla \phi,
 \end{equation}
 where the extra/intra-cellular potential field $\phi$ has units $mV$.
 
-The derivation of the one-dimensional conservation equation \eq{eq:cable_balance} is based on the assumption that the intra-cellular potential (i.e. inside the cell) does not vary radially.
-That is, potential is a function of the axial distance $x$ alone
+The derivation of the one-dimensional conservation equation \eq{eq:cable_balance} is based on the assumption that the intracellular potential (i.e. inside the cell) does not vary radially.
+That is, potential is a function of the axial distance $x$ alone:
 \begin{equation}
     \vv{E} = \nabla \phi = \pder{V}{x}.
 \end{equation}
-This is not strictly true, because a potential field that is a variable of $x$ and $t$ alone can't support the axial gradients required to drive the potential difference over the cell membrane.
-I am still trying to get my head around the assumptions made in mapping a three-dimensional problem to a pseudo one-dimensional one.
+In addition, the cellular membrane is regarded as an ideal capacitor, and the extracellular medium (ECM) is regarded as having constant potential.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{The cable equation}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-The cable equation is a nonlinear parabolic PDE that can be written in the form
+The inhomogeneous cable equation is a nonlinear parabolic PDE that can be written in the form
 \begin{equation}
     \label{eq:cable}
-    c_m \pder{V}{t} = \frac{1}{2\pi a r_{L}} \pder{}{x} \left( a^2 \pder{V}{x} \right) - i_m + i_e,
+%    c_m \pder{V}{t} = \frac{1}{2\pi a r_{L}} \pder{}{x} \left( a^2 \pder{V}{x} \right) - i_m + i_e,
+    c(x) \pder{V(x, t)}{t} = \pder{}{x} \left( \sigma(x) \pder{V(x, t)}{x} \right) - i_m(x, t) + i_e(x, t),
 \end{equation}
 where
 \begin{itemize}
-    \item $V$ is the potential relative to the ECM $[mV]$
-    \item $a$ is the cable radius $(mm)$, and can vary with $x$
-    \item $c_m$ is the {specific membrane capacitance}, approximately the same for all neurons $\approx 10~nF/mm^2$. Related to \emph{membrane capacitance} $C_m$ by the relationship $C_m=c_{m}A$, where $A$ is the surface area of the cell.
-    \item $i_m$ is the membrane current $[A\cdot/mm^{2}]$ per unit area. The total contribution from ion and synaptic channels is expressed as a the product of current per unit area $i_m$ and the surface area.
-    \item $i_e$ is the electrode current flowing into the cell, divided by surface area, i.e. $i_e=I_e/A$.
-    \item $r_L$ is intracellular resistivity, typical value $1~k\Omega \text{cm}$
+    \item $V$ is the potential relative to the ECM;
+    \item $\sigma$ is the cable (linear) conductivity;
+    \item $c$ is the cable (linear) specific capicitance;
+    \item $i_m$ is the membrane current per unit length; and
+    \item $i_e$ is the electrode current flowing into the cell.
 \end{itemize}
+Note that the standard convention is followed, whereby membrane currents ($i_m$)
+are positive when outward, and electrode currents ($i_e$) are positive inward.
 
-Note that the standard convention is followed, whereby membrane and synapse currents ($i_m$) are positive when outward, and electrod currents ($i_e$) are positive inward.
+
+These values are in turn related to bulk biophysical properties of the
+neurite and its radius as a function of position. The cable surface area
+per unit length is given in terms of the cable radius $r(x)$ by
+\begin{equation}
+    \label{eq:area}
+    S(x) = 2 \pi r(x) \sqrt{1 + r'(x)^2}, \\
+\end{equation}
+giving
+\begin{gather}
+    c(x) = S(x) C_M(x), \\
+    \sigma(x) = \pi r(x)^2 / R_M(x).
+\end{gather}
+where
+\begin{itemize}
+    \item $C_M(x)$ is the membrane specific areal capacitance at $x$, which is typically on the order of \SI{0.01}{\F\per\m\squared}; and
+    \item $R_M(x)$ is the intracellular bulk resistivity at $x$, on the order of \SI{10}{\ohm\m}.
+\end{itemize}
+These values are assumed to be constant in time, but possibly inhomogeneous along the cable.
+
+The electrode currents are modelled as discrete current sources,
+\begin{equation}
+    i_e(x, t) = \Sigma_j I^{(e)}_j(t) \delta(x, x^{(e)}_j).
+\end{equation}
+
+The membrane currents comprise voltage-dependent currents from point and distributed sources,
+\begin{equation}
+\begin{split}
+    i_m(x, t) = \Sigma_j I^{(p)}_j(V(x^{(p)}_j, t)) \delta(x, x^{(p)}_j), \\
+\qquad
+    + S(x) \Sigma_j J^{(d)}_j(V(x, t), x, t),
+\end{split}
+\end{equation}
+where the superscript $(p)$ denotes point currents, and $(d)$ denotes the distinct distributed sources.
+
+The membrane current sources are often expressed in terms of a time-varying conductivity or conductance
+together with a reversal potential --- a value of the voltage for which the current is zero.
+\begin{gather}
+    I^{(p)}_j(v, t) = g^{(p)}(t)(v - E^{(p)}_j), \\
+    J^{(d)}_j(v, x, t) = g^{(d)}(x, t)(v - E^{(d)}_j).
+\end{gather}
+For the purposes of solving the cable equation numerically, it is useful to consider these currents
+and current densities to be approximately linear functions of voltage, even when they are not
+determined by a time-invariant reversal potential.
+
+\textbf{TODO FROM HERE}
 
 The PDE in (\ref{eq:cable}) is derived by integrating~\eq{eq:J} over the volume of segment $i$:
 \begin{equation*}
