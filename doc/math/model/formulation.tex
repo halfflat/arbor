@@ -1,60 +1,57 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \subsection{Brief background for derivation of the cable equation}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-See \cite{lindsay_2004} for a detailed derivation of the cable equation, and extensions to the one-dimensional model that account for radial variation of potential.
 
-The one-dimensional cable equation introduced later in equations~\eq{eq:cable} and~\eq{eq:cable_balance} is based on the following expression in three dimensions (based on Maxwell's equations adapted for neurological modelling)
+See \cite{lindsay_2004} for a detailed derivation of the cable equation, and
+extensions to the one-dimensional model that account for radial variation of
+potential.
+
+An unbranched section of neurite is modelled as a conductor (the intracellular
+medium) surrounded by a capacitive insulator (the lipid membrane) together with
+additional current sources corresponding to the action of ion channels,
+synapses, and other biophysical processes. It is assumed that charge dispersion
+is effectively instantaneous and that the system can be modelled in the
+electoquasistatic limit (EQS) of the Maxwell equations, so that
 \begin{equation}
-    \nabla \cdot \vv{J} = 0,
-    \label{eq:J}
+    \label{eq:continuity}
+    \nabla\cdot\vv{J} = -\pder{\rho}{t} = 0
 \end{equation}
-where $\vv{J}$ is current density.
-Current density is in turn defined in terms of electric field $\vv{E}$ by
+where $\vv{J}$ is the current density and $\rho$ the charge density.
+
+The current density in the conductor in turn is proportional to the electrical
+field under the assumption that the intracellular medium is ohmic,
 \begin{equation}
     \vv{J} = \sigma \vv{E},
 \end{equation}
-under the assumption that the intracellular medium is ohmic.
-where $\sigma$ is the specific electrical conductivity of intra-cellular fluid (typically 3.3 $S/m$).
+where $\sigma$ is the scalar intracellular conductivity.
 
-The derivation of the cable equation is based on two further assumptions:
-\begin{enumerate}
-    \item that charge disperion is effectively instantaneous for the purposes of dendritic modelling.
-    \item that diffusion of magnetic field is instant, that is, it behaves quasi-statically in the sense that it is determined by the electric field through the Maxwell equations.
-\end{enumerate}
-These correspond to the electroquasistatic (EQS) limit for the Maxwell equations.
-Under these conditions, $\vv{E}$ is conservative, and as such can be expressed in terms of a potential field
+Under the further assumptions that the electric field in the conductor is
+constant in cross-section and that the conductor is uncurved, the continuity
+equation (\ref{eq:continuity}) reduces to the one dimensional form
 \begin{equation}
-    \vv{E} = \nabla \phi,
+    \pder{}{x}(\sigma E) = -\pder{}{x}\left(\sigma\pder{V}{x}\right) = -J_\text{membrane}
 \end{equation}
-where the extra/intra-cellular potential field $\phi$ has units $mV$.
+where $V$ is the electric potential and the current density $J_\text{membrane}$
+captures the membrane capacitive current and all other transmembrane current
+sources, including electrode and synapse currents modelled as point sources.
 
-The derivation of the one-dimensional conservation equation \eq{eq:cable_balance} is based on the assumption that the intracellular potential (i.e. inside the cell) does not vary radially.
-That is, potential is a function of the axial distance $x$ alone:
-\begin{equation}
-    \vv{E} = \nabla \phi = \pder{V}{x}.
-\end{equation}
-In addition, the cellular membrane is regarded as an ideal capacitor, and the extracellular medium (ECM) is regarded as having constant potential.
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{The cable equation}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-The inhomogeneous cable equation is a nonlinear parabolic PDE that can be written in the form
+Regarding the extracellular medium as having constant potential and the
+membrane as acting as an ideal capacitor then gives the inhomogeneous cable
+equation:
 \begin{equation}
     \label{eq:cable}
-%    c_m \pder{V}{t} = \frac{1}{2\pi a r_{L}} \pder{}{x} \left( a^2 \pder{V}{x} \right) - i_m + i_e,
-    c(x) \pder{V(x, t)}{t} = \pder{}{x} \left( \sigma(x) \pder{V(x, t)}{x} \right) - i_m(x, t) + i_e(x, t),
+    c(x) \pder{V(x, t)}{t} = \pder{}{x} \left( \sigma(x) \pder{V(x, t)}{x} \right) - i_m(x, t) + i_e(x, t)
 \end{equation}
 where
 \begin{itemize}
-    \item $V$ is the potential relative to the ECM;
-    \item $\sigma$ is the cable (linear) conductivity;
-    \item $c$ is the cable (linear) specific capicitance;
-    \item $i_m$ is the membrane current per unit length; and
+    \item $V$ is the potential relative to the extracellular potential,
+    \item $\sigma$ is the linear cable conductivity,
+    \item $c$ is the linear cable specific capicitance,
+    \item $i_m$ is the membrane current per unit length, and
     \item $i_e$ is the electrode current flowing into the cell.
 \end{itemize}
-Note that the standard convention is followed, whereby membrane currents ($i_m$)
-are positive when outward, and electrode currents ($i_e$) are positive inward.
-
+Note that the standard sign convention is followed where the membrane currents $i_m$
+are positive when outward and the electrode currents $i_e$ are positive inward.
 
 These values are in turn related to bulk biophysical properties of the
 neurite and its radius as a function of position. The cable surface area
@@ -75,12 +72,13 @@ where
 \end{itemize}
 These values are assumed to be constant in time, but possibly inhomogeneous along the cable.
 
-The electrode currents are modelled as discrete current sources,
+The electrode currents are modelled as discrete current sources at sites $x^{(e)_j}$,
 \begin{equation}
     i_e(x, t) = \Sigma_j I^{(e)}_j(t) \delta(x, x^{(e)}_j).
 \end{equation}
 
-The membrane currents comprise voltage-dependent currents from point and distributed sources,
+The membrane currents comprise voltage-dependent currents from point and
+distributed sources,
 \begin{equation}
 \begin{split}
     i_m(x, t) = \Sigma_j I^{(p)}_j(V(x^{(p)}_j, t)) \delta(x, x^{(p)}_j), \\
@@ -88,72 +86,43 @@ The membrane currents comprise voltage-dependent currents from point and distrib
     + S(x) \Sigma_j J^{(d)}_j(V(x, t), x, t),
 \end{split}
 \end{equation}
-where the superscript $(p)$ denotes point currents, and $(d)$ denotes the distinct distributed sources.
+where the superscript $(p)$ denotes point currents, and $(d)$ denotes the
+distinct distributed sources.
 
-The membrane current sources are often expressed in terms of a time-varying conductivity or conductance
-together with a reversal potential --- a value of the voltage for which the current is zero.
+The membrane current sources are often expressed in terms of a time-varying
+conductivity or conductance together with a reversal potential --- a value of
+the voltage for which the current is zero.
 \begin{gather}
     I^{(p)}_j(v, t) = g^{(p)}(t)(v - E^{(p)}_j), \\
     J^{(d)}_j(v, x, t) = g^{(d)}(x, t)(v - E^{(d)}_j).
 \end{gather}
-For the purposes of solving the cable equation numerically, it is useful to consider these currents
-and current densities to be approximately linear functions of voltage, even when they are not
-determined by a time-invariant reversal potential.
+For the purposes of solving the cable equation numerically, it is useful to
+consider these currents and current densities to be approximately linear
+functions of voltage, even when they are not determined by a time-invariant
+reversal potential.
+
+Branch points in the dendritic tree are modelled as ideal electrical connections,
+so that the cable currents at the point sum to zero.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\subsection{Finite volume discretization}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+The finite volume method is a natural choice for the solution of systems goverened
+by a conversation law such as \eq{eq:continuity}. The dendritic tree is subdivided
+into a tree of control volumes $\Omega_i$, each associated with a value for the
+potential $V_i$.
 
 \textbf{TODO FROM HERE}
-
-The PDE in (\ref{eq:cable}) is derived by integrating~\eq{eq:J} over the volume of segment $i$:
-\begin{equation*}
-    \int_{\Omega_i}{\nabla \cdot \vv{J} } \deriv{v} = 0,
-\end{equation*}
-Then applying the divergence theorem to turn the volume integral on the lhs into a surface integral
-\begin{equation}
-          \sum_{j\in\mathcal{N}_i} {\int_{\Gamma_{i,j}} J_{i,j} \deriv{s} }
-        + \int_{\Gamma_{i}} {J_m} \deriv{s} = 0
-    \label{eq:cable_balance_intermediate}
-\end{equation}
-where
-\begin{itemize}
-    \item $\int_\Omega \cdot \deriv{v}$ is shorthand for the volume integral over the segment $\Omega_i$
-    \item $\int_\Gamma \cdot \deriv{s}$ is shorthand for the surface integral over the surface $\Gamma$
-    \item $J_{i,j}=-\frac{1}{r_L}\pder{V}{x} n_{i,j}$ is the flux per unit area of current \emph{from segment $i$ to segment $j$} over the interface $\Gamma_{i,j}$ between the two segments.
-    \item the set $\mathcal{N}_i$ is the set of segments that are neighbours of $\Omega_i$
-\end{itemize}
-The transmembrane current density $J_m=\vv{J}\cdot\vv{n}$ is a function of the membrane potential
-\begin{equation}
-    J_m = c_m\pder{V}{t} + i_m - i_e,
-    \label{eq:Jm}
-\end{equation}
-which has contributions from the ion channels and synapses ($i_m$), electrodes ($i_e$) and capacitive current due to polarization of the membrane whose bi-layer lipid structure causes it to behave locally like a parallel plate capacitor.
-
-Substituting~\eq{eq:Jm} into~\eq{eq:cable_balance_intermediate} and rearanging gives
-\begin{equation}
-      \int_{\Gamma_{i}} {c_m\pder{V}{t}} \deriv{s}
-    = - \sum_{j\in\mathcal{N}_i} {\int_{\Gamma_{i,j}} J_{i,j} \deriv{s} }
-    - \int_{\Gamma_{i}} {(i_m - i_e)} \deriv{s}
-    \label{eq:cable_balance}
-\end{equation}
-
-
-The surface of the cable segment is sub-divided into the internal and external surfaces.
-The external surface $\Gamma_{i}$ is the cell membrane at the interface between the extra-cellular and intra-cellular regions.
-The current, which is the conserved quantity in our conservation law, over the surface is composed of the synapse and ion channel contributions.
-This is derived from a thin film approximation to the cell membrane, whereby the membrane is treated as an infinitesimally thin interface between the intra and extra cellular regions.
-
-Note that some information is lost when going from a three-dimensional description of a neuron to a system of branching one-dimensional cable segments.
-If the cell is represented by cylinders or frustums\footnote{a frustum is a truncated cone, where the truncation plane is parallel to the base of the cone.}, the three-dimensional values for volume and surface area at branch points can't be retrieved from the one-dimensional description.
 
 \begin{figure}
     \begin{center}
         \includegraphics[width=0.5\textwidth]{./images/cable.pdf}
     \end{center}
-    \caption{A single segment, or control volume, on an unbranching dendrite.}
+    \caption{A single segment, or control volume, on an unbranching dendrite. TODO: decouple CV boundaries from discontinuities of $r'$.}
     \label{fig:segment}
 \end{figure}
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\subsection{Finite volume discretization}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 The finite volume method is a natural choice for the solution of the conservation law in~\eq{eq:cable_balance}.
 
 \begin{itemize}
